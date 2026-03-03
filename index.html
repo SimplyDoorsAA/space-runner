@@ -91,13 +91,13 @@
     <div id="uiLayer">
         <div id="startMenu" class="menu">
             <h1>Neon Runner</h1>
-            <div id="loadingText">Warming up engines...</div>
+            <div id="loadingText">Connecting to GitHub Models...</div>
             <p>
                 <b>Left/Right Arrows</b> to change lanes.<br>
                 <b>Up Arrow</b> to Jump.<br>
                 <b>Spacebar</b> to Shoot Lasers!
             </p>
-            <p>Dodge the <span class="highlight">Meteors</span>!<br>Collect <span class="collect">Gold Stars</span>.</p>
+            <p>Dodge the <span class="highlight">Obstacles</span>!<br>Collect <span class="collect">Gold Stars</span>.</p>
             <button id="startBtn" style="display: none;">Blast Off!</button>
         </div>
 
@@ -120,9 +120,8 @@
         let gameSpeed = 50;
         let speedMultiplier = 1;
 
-        // Note: If you dragged the files directly into GitHub instead of the folder, 
-        // change this to just '' (empty string).
-        const PATH = 'GLTF format/'; 
+        // FIXED PATH: Points to your exact folder name, handling the space (%20)
+        const PATH = 'SpaceShip%20Images/'; 
 
         // --- SCENE SETUP ---
         const scene = new THREE.Scene();
@@ -164,79 +163,66 @@
 
         // --- ASSET MANAGEMENT ---
         const gltfLoader = new THREE.GLTFLoader();
-        const loadedShips = [];
-        const loadedMeteors = [];
+        const loadedPlayers = [];
+        const loadedEnemies = [];
         
-        // Define the specific models we want to load from your GitHub folder
-        const shipFiles = ['craft_speederA.gltf', 'craft_miner.gltf', 'craft_racer.gltf', 'craft_speederD.gltf'];
-        const meteorFiles = ['meteor_detailed.gltf', 'meteor_square.gltf', 'meteor_small.gltf'];
+        // FIXED FILES: Using the exact .glb files from your screenshot
+        const playerFiles = ['astronautA.glb', 'astronautB.glb'];
+        const enemyFiles = ['alien.glb', 'barrel.glb'];
 
-        // We use a LoadingManager to wait until ALL files are downloaded
+        // LoadingManager waits until ALL files are downloaded
         const manager = new THREE.LoadingManager();
         manager.onLoad = function () {
             document.getElementById('loadingText').style.display = 'none';
             document.getElementById('startBtn').style.display = 'block';
             gameState = 'MENU';
-            buildPlayerAndTail(); // Construct the game pieces once models are ready
+            buildPlayerAndTail(); 
         };
         manager.onError = function (url) {
             console.error('Error loading:', url);
-            document.getElementById('loadingText').innerText = "Error loading models. Check folder path!";
+            document.getElementById('loadingText').innerText = "File not found! Check spelling in code.";
         };
 
-        // Tell the GLTFLoader to use our manager
         gltfLoader.manager = manager;
 
-        // Load all ships
-        shipFiles.forEach(file => {
+        // Load all Player characters
+        playerFiles.forEach(file => {
             gltfLoader.load(PATH + file, function(gltf) {
-                const ship = gltf.scene;
-                ship.scale.set(0.5, 0.5, 0.5);
-                ship.rotation.y = Math.PI; // Face forward
-                
-                // Add a glowing engine flame to every ship
-                const flameGeo = new THREE.ConeGeometry(0.5, 2.5, 8);
-                flameGeo.rotateX(-Math.PI / 2); 
-                const flameMat = new THREE.MeshBasicMaterial({ color: 0x00ffff }); // Cyan flame
-                const flame = new THREE.Mesh(flameGeo, flameMat);
-                flame.position.set(0, 0, 1.5); // Place at the back
-                flame.name = "flame";
-                ship.add(flame);
-
-                loadedShips.push(ship);
+                const model = gltf.scene;
+                model.scale.set(1.5, 1.5, 1.5); 
+                model.rotation.y = Math.PI; // Face forward
+                loadedPlayers.push(model);
             });
         });
 
-        // Load all meteors
-        meteorFiles.forEach(file => {
+        // Load all Enemy characters
+        enemyFiles.forEach(file => {
             gltfLoader.load(PATH + file, function(gltf) {
-                const meteor = gltf.scene;
-                meteor.scale.set(1.5, 1.5, 1.5); // Make meteors chunky
-                loadedMeteors.push(meteor);
+                const model = gltf.scene;
+                model.scale.set(2, 2, 2); 
+                loadedEnemies.push(model);
             });
         });
 
         // --- GAME ENTITIES ---
         let playerGroup = new THREE.Group();
-        const tailCount = 3;
+        const tailCount = 2; // Reduced to 2 so we don't clutter the screen with astronauts
         const tails = [];
         const playerHistory = []; 
 
         function buildPlayerAndTail() {
-            // Player is the first ship we loaded
-            playerGroup.add(loadedShips[0].clone());
+            // Player is the first model we loaded
+            playerGroup.add(loadedPlayers[0].clone());
             playerGroup.position.set(LANE_X[currentLane], 1.5, 0);
             scene.add(playerGroup);
 
-            // Give the tails different ships!
+            // Give the tails the other models
             for(let i=0; i<tailCount; i++) {
                 const tailGroup = new THREE.Group();
-                // Pick the next ship in the array, making sure we don't run out
-                const shipIndex = (i + 1) % loadedShips.length; 
-                const clonedShip = loadedShips[shipIndex].clone();
-                clonedShip.scale.set(0.4, 0.4, 0.4); // Make followers slightly smaller
+                const modelIndex = (i + 1) % loadedPlayers.length; 
+                const clonedModel = loadedPlayers[modelIndex].clone();
                 
-                tailGroup.add(clonedShip);
+                tailGroup.add(clonedModel);
                 tailGroup.position.set(playerGroup.position.x, playerGroup.position.y, playerGroup.position.z + (i+1)*2.5);
                 scene.add(tailGroup);
                 tails.push(tailGroup);
@@ -315,15 +301,15 @@
             const zPos = -200; 
 
             if (type === 'ENEMY') {
-                // Pick a RANDOM meteor model from the ones we loaded!
-                const randomMeteor = loadedMeteors[Math.floor(Math.random() * loadedMeteors.length)];
-                const mesh = randomMeteor.clone();
+                // Pick a RANDOM enemy from your uploaded .glb files
+                const randomEnemy = loadedEnemies[Math.floor(Math.random() * loadedEnemies.length)];
+                const mesh = randomEnemy.clone();
                 mesh.position.set(xPos, 1.5, zPos);
                 
-                // Give each meteor a random spin speed
+                // Only spin the enemy slightly so we can see what it is
                 mesh.userData = {
-                    rotX: (Math.random() - 0.5) * 5,
-                    rotY: (Math.random() - 0.5) * 5
+                    rotX: (Math.random() - 0.5) * 2,
+                    rotY: (Math.random() - 0.5) * 2
                 };
                 
                 scene.add(mesh);
@@ -417,15 +403,6 @@
         document.getElementById('startBtn').addEventListener('click', resetGame);
         document.getElementById('restartBtn').addEventListener('click', resetGame);
 
-        // Helper to animate flames
-        function animateFlames(group) {
-            group.traverse(child => {
-                if (child.name === 'flame') {
-                    child.scale.z = 0.5 + Math.random() * 1.5; 
-                }
-            });
-        }
-
         // --- MAIN UPDATE LOOP ---
         const clock = new THREE.Clock();
 
@@ -434,11 +411,6 @@
             const delta = clock.getDelta();
 
             if (delta > 0.1) return; 
-
-            if (gameState !== 'LOADING') {
-                animateFlames(playerGroup);
-                tails.forEach(tail => animateFlames(tail));
-            }
 
             for (let i = explosionParticles.length - 1; i >= 0; i--) {
                 let p = explosionParticles[i];
@@ -454,7 +426,7 @@
             if (gameState === 'PLAYING') {
                 const targetX = LANE_X[currentLane];
                 playerGroup.position.x += (targetX - playerGroup.position.x) * 15 * delta;
-                playerGroup.rotation.z = (playerGroup.position.x - targetX) * -0.15; // Deeper tilt
+                playerGroup.rotation.z = (playerGroup.position.x - targetX) * -0.15; 
 
                 if (isJumping) {
                     playerGroup.position.y += playerVelocityY * delta;
@@ -500,7 +472,6 @@
 
                 for (let i = enemies.length - 1; i >= 0; i--) {
                     enemies[i].position.z += currentSpeed * delta;
-                    // Apply random rotation based on userData set during spawn
                     enemies[i].rotation.x += enemies[i].userData.rotX * delta;
                     enemies[i].rotation.y += enemies[i].userData.rotY * delta;
                     
