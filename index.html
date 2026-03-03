@@ -120,7 +120,6 @@
         let gameSpeed = 50;
         let speedMultiplier = 1;
 
-        // FIXED PATH: Points to your exact folder name, handling the space (%20)
         const PATH = 'SpaceShip%20Images/'; 
 
         // --- SCENE SETUP ---
@@ -136,10 +135,17 @@
         renderer.setSize(window.innerWidth, window.innerHeight);
         document.body.appendChild(renderer.domElement);
 
-        // --- VIBRANT LIGHTING ---
+        // --- UPGRADED LIGHTING FOR .GLB MODELS ---
+        // 1. A strong ambient light so the dark parts of the 3D models are visible
+        const ambientLight = new THREE.AmbientLight(0xffffff, 1.5); 
+        scene.add(ambientLight);
+
+        // 2. The neon colors for the environment
         const hemiLight = new THREE.HemisphereLight(0xff00ff, 0x00ffff, 0.8); 
         scene.add(hemiLight);
-        const dirLight = new THREE.DirectionalLight(0xffffff, 0.6);
+        
+        // 3. A strong directional light to cast shiny reflections
+        const dirLight = new THREE.DirectionalLight(0xffffff, 1.0);
         dirLight.position.set(10, 20, 10);
         scene.add(dirLight);
 
@@ -166,11 +172,9 @@
         const loadedPlayers = [];
         const loadedEnemies = [];
         
-        // FIXED FILES: Using the exact .glb files from your screenshot
         const playerFiles = ['astronautA.glb', 'astronautB.glb'];
         const enemyFiles = ['alien.glb', 'barrel.glb'];
 
-        // LoadingManager waits until ALL files are downloaded
         const manager = new THREE.LoadingManager();
         manager.onLoad = function () {
             document.getElementById('loadingText').style.display = 'none';
@@ -189,8 +193,21 @@
         playerFiles.forEach(file => {
             gltfLoader.load(PATH + file, function(gltf) {
                 const model = gltf.scene;
-                model.scale.set(1.5, 1.5, 1.5); 
-                model.rotation.y = Math.PI; // Face forward
+                
+                // Hack the materials to make sure they aren't black
+                model.traverse((child) => {
+                    if (child.isMesh && child.material) {
+                        child.material.metalness = 0.1; // Make it less metallic so it reflects better
+                        child.material.roughness = 0.5; 
+                        // Add a slight self-glow based on its own color
+                        child.material.emissive = child.material.color || new THREE.Color(0x000000);
+                        child.material.emissiveIntensity = 0.2; 
+                    }
+                });
+
+                // Made the astronauts BIGGER (was 1.5, now 3.5)
+                model.scale.set(3.5, 3.5, 3.5); 
+                model.rotation.y = Math.PI; 
                 loadedPlayers.push(model);
             });
         });
@@ -199,33 +216,50 @@
         enemyFiles.forEach(file => {
             gltfLoader.load(PATH + file, function(gltf) {
                 const model = gltf.scene;
-                model.scale.set(2, 2, 2); 
+
+                // Fix materials for enemies too
+                model.traverse((child) => {
+                    if (child.isMesh && child.material) {
+                        child.material.metalness = 0.1;
+                        child.material.roughness = 0.5;
+                        child.material.emissive = child.material.color || new THREE.Color(0x000000);
+                        child.material.emissiveIntensity = 0.2;
+                    }
+                });
+
+                // Made the enemies BIGGER (was 2, now 4)
+                model.scale.set(4, 4, 4); 
                 loadedEnemies.push(model);
             });
         });
 
         // --- GAME ENTITIES ---
         let playerGroup = new THREE.Group();
-        const tailCount = 2; // Reduced to 2 so we don't clutter the screen with astronauts
+        const tailCount = 2; 
         const tails = [];
         const playerHistory = []; 
 
         function buildPlayerAndTail() {
-            // Player is the first model we loaded
-            playerGroup.add(loadedPlayers[0].clone());
+            if(loadedPlayers.length > 0) {
+                playerGroup.add(loadedPlayers[0].clone());
+            }
             playerGroup.position.set(LANE_X[currentLane], 1.5, 0);
             scene.add(playerGroup);
 
-            // Give the tails the other models
             for(let i=0; i<tailCount; i++) {
-                const tailGroup = new THREE.Group();
-                const modelIndex = (i + 1) % loadedPlayers.length; 
-                const clonedModel = loadedPlayers[modelIndex].clone();
-                
-                tailGroup.add(clonedModel);
-                tailGroup.position.set(playerGroup.position.x, playerGroup.position.y, playerGroup.position.z + (i+1)*2.5);
-                scene.add(tailGroup);
-                tails.push(tailGroup);
+                if(loadedPlayers.length > 0) {
+                    const tailGroup = new THREE.Group();
+                    const modelIndex = (i + 1) % loadedPlayers.length; 
+                    const clonedModel = loadedPlayers[modelIndex].clone();
+                    
+                    // Make tails a bit smaller than the main player
+                    clonedModel.scale.set(2.5, 2.5, 2.5); 
+
+                    tailGroup.add(clonedModel);
+                    tailGroup.position.set(playerGroup.position.x, playerGroup.position.y, playerGroup.position.z + (i+1)*3);
+                    scene.add(tailGroup);
+                    tails.push(tailGroup);
+                }
             }
         }
 
@@ -240,7 +274,7 @@
         let projectiles = [];
         let explosionParticles = []; 
 
-        // Glowing Gold Star (Pure 3D shape)
+        // Glowing Gold Star
         const collectGeo = new THREE.OctahedronGeometry(1.2, 0);
         const collectMat = new THREE.MeshLambertMaterial({ color: 0xffff00, emissive: 0xaa8800 });
         // Laser Projectile
@@ -301,19 +335,19 @@
             const zPos = -200; 
 
             if (type === 'ENEMY') {
-                // Pick a RANDOM enemy from your uploaded .glb files
-                const randomEnemy = loadedEnemies[Math.floor(Math.random() * loadedEnemies.length)];
-                const mesh = randomEnemy.clone();
-                mesh.position.set(xPos, 1.5, zPos);
-                
-                // Only spin the enemy slightly so we can see what it is
-                mesh.userData = {
-                    rotX: (Math.random() - 0.5) * 2,
-                    rotY: (Math.random() - 0.5) * 2
-                };
-                
-                scene.add(mesh);
-                enemies.push(mesh);
+                if(loadedEnemies.length > 0) {
+                    const randomEnemy = loadedEnemies[Math.floor(Math.random() * loadedEnemies.length)];
+                    const mesh = randomEnemy.clone();
+                    mesh.position.set(xPos, 1.5, zPos);
+                    
+                    mesh.userData = {
+                        rotX: (Math.random() - 0.5) * 2,
+                        rotY: (Math.random() - 0.5) * 2
+                    };
+                    
+                    scene.add(mesh);
+                    enemies.push(mesh);
+                }
             } else if (type === 'COLLECTIBLE') {
                 const mesh = new THREE.Mesh(collectGeo, collectMat);
                 mesh.position.set(xPos, 1.5, zPos);
@@ -342,7 +376,7 @@
             document.getElementById('scoreValue').innerText = score;
 
             tails.forEach((t, i) => {
-                t.position.set(playerGroup.position.x, playerGroup.position.y, (i+1)*3);
+                t.position.set(playerGroup.position.x, playerGroup.position.y, (i+1)*4); // Spaced out more
             });
 
             document.getElementById('startMenu').classList.add('hidden');
@@ -354,11 +388,11 @@
 
         function checkCollisions() {
             const playerBox = new THREE.Box3().setFromObject(playerGroup);
-            playerBox.expandByScalar(-0.6); 
+            playerBox.expandByScalar(-0.8); // Shrunk hitbox further to make dodging fair
 
             for (let i = enemies.length - 1; i >= 0; i--) {
                 const enemyBox = new THREE.Box3().setFromObject(enemies[i]);
-                enemyBox.expandByScalar(-0.3); 
+                enemyBox.expandByScalar(-0.4); 
 
                 if (playerBox.intersectsBox(enemyBox)) {
                     createExplosion(playerGroup.position.x, playerGroup.position.y, playerGroup.position.z, 0x00ffff);
@@ -500,6 +534,7 @@
                 speedMultiplier += 0.01 * delta;
             }
 
+            // Bobbing animation for the menu
             if (gameState === 'MENU' && playerGroup.position) {
                 playerGroup.position.y = 1.5 + Math.sin(Date.now() * 0.003) * 0.3;
             }
