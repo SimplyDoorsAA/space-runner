@@ -3,12 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>3D Space Runner</title>
+    <title>Neon Space Runner</title>
     <style>
         body { 
             margin: 0; 
             overflow: hidden; 
-            background-color: #050510; 
+            background-color: #1a0033; 
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
             user-select: none;
         }
@@ -24,39 +24,63 @@
             top: 20px;
             left: 30px;
             color: #00ffff;
-            font-size: 28px;
+            font-size: 36px;
             font-weight: 900;
-            text-shadow: 0 0 10px #00ffff;
+            text-shadow: 0 0 15px #00ffff, 0 0 5px #fff;
             display: none;
         }
         .menu { 
-            background: rgba(10, 10, 30, 0.85); 
+            background: rgba(20, 0, 40, 0.9); 
             padding: 50px; 
-            border-radius: 15px; 
-            border: 2px solid #00ffff;
+            border-radius: 20px; 
+            border: 4px solid #ff00ff;
             text-align: center; 
             color: white; 
             pointer-events: auto; 
-            box-shadow: 0 0 30px rgba(0, 255, 255, 0.2);
+            box-shadow: 0 0 40px rgba(255, 0, 255, 0.5), inset 0 0 20px rgba(0, 255, 255, 0.3);
         }
-        h1 { margin-top: 0; color: #00ffff; font-size: 48px; text-transform: uppercase; letter-spacing: 2px; }
-        p { font-size: 18px; color: #aaa; line-height: 1.6; }
-        .highlight { color: #ff0055; font-weight: bold; }
-        .collect { color: #00ffaa; font-weight: bold; }
+        h1 { 
+            margin-top: 0; 
+            color: #fff; 
+            font-size: 54px; 
+            text-transform: uppercase; 
+            letter-spacing: 3px; 
+            text-shadow: 0 0 20px #ff00ff, 0 0 10px #ff00ff;
+        }
+        p { font-size: 20px; color: #ddd; line-height: 1.6; font-weight: bold; }
+        .highlight { color: #ff0055; text-shadow: 0 0 10px #ff0055; }
+        .collect { color: #ffff00; text-shadow: 0 0 10px #ffff00; }
         button { 
-            background: #00ffff; 
-            color: #000; 
+            background: linear-gradient(45deg, #00ffff, #0088ff); 
+            color: #fff; 
             border: none; 
-            padding: 15px 40px; 
-            font-size: 20px; 
-            border-radius: 8px; 
+            padding: 15px 50px; 
+            font-size: 24px; 
+            border-radius: 50px; 
             cursor: pointer; 
             text-transform: uppercase; 
             font-weight: 900; 
             margin-top: 20px;
+            box-shadow: 0 0 20px #00ffff;
             transition: all 0.2s;
         }
-        button:hover { background: #fff; box-shadow: 0 0 20px #00ffff; transform: scale(1.05); }
+        button:hover { 
+            background: linear-gradient(45deg, #fff, #00ffff); 
+            color: #000;
+            box-shadow: 0 0 30px #fff; 
+            transform: scale(1.1); 
+        }
+        #loadingText {
+            color: #ffff00;
+            font-size: 24px;
+            margin-bottom: 20px;
+            animation: pulse 1s infinite;
+        }
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
         .hidden { display: none !important; }
     </style>
 </head>
@@ -66,37 +90,44 @@
 
     <div id="uiLayer">
         <div id="startMenu" class="menu">
-            <h1>Space Runner</h1>
+            <h1>Neon Runner</h1>
+            <div id="loadingText">Warming up engines...</div>
             <p>
-                <b>Left/Right Arrows</b> to switch lanes.<br>
+                <b>Left/Right Arrows</b> to change lanes.<br>
                 <b>Up Arrow</b> to Jump.<br>
-                <b>Spacebar</b> to Shoot!
+                <b>Spacebar</b> to Shoot Lasers!
             </p>
-            <p>Dodge the <span class="highlight">Spiky Aliens</span>!<br>Collect <span class="collect">Green Rings</span> for points.</p>
-            <button id="startBtn">Play Now</button>
+            <p>Dodge the <span class="highlight">Meteors</span>!<br>Collect <span class="collect">Gold Stars</span>.</p>
+            <button id="startBtn" style="display: none;">Blast Off!</button>
         </div>
 
         <div id="gameOverMenu" class="menu hidden">
-            <h1 style="color: #ff0055;">MISSION FAILED</h1>
-            <p>Final Score: <span id="finalScore" style="color: #fff; font-size: 24px; font-weight: bold;">0</span></p>
-            <button id="restartBtn">Reboot Mission</button>
+            <h1 style="color: #ff0055; text-shadow: 0 0 20px #ff0000;">CRASH!</h1>
+            <p>Final Score: <span id="finalScore" style="color: #ffff00; font-size: 32px; font-weight: bold;">0</span></p>
+            <button id="restartBtn">Play Again</button>
         </div>
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
     
     <script>
         // --- GAME STATE & CONSTANTS ---
-        let gameState = 'MENU'; 
+        let gameState = 'LOADING'; 
         const LANE_X = [-4, 0, 4]; 
         let currentLane = 1; 
         let score = 0;
-        let gameSpeed = 40;
+        let gameSpeed = 50;
         let speedMultiplier = 1;
+
+        // Note: If you dragged the files directly into GitHub instead of the folder, 
+        // change this to just '' (empty string).
+        const PATH = 'GLTF format/'; 
 
         // --- SCENE SETUP ---
         const scene = new THREE.Scene();
-        scene.fog = new THREE.FogExp2(0x050510, 0.015); 
+        scene.background = new THREE.Color(0x1a0033); 
+        scene.fog = new THREE.FogExp2(0x1a0033, 0.012); 
 
         const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 200);
         camera.position.set(0, 6, 14);
@@ -106,73 +137,134 @@
         renderer.setSize(window.innerWidth, window.innerHeight);
         document.body.appendChild(renderer.domElement);
 
-        // --- LIGHTING ---
-        const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
-        scene.add(ambientLight);
-        const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        // --- VIBRANT LIGHTING ---
+        const hemiLight = new THREE.HemisphereLight(0xff00ff, 0x00ffff, 0.8); 
+        scene.add(hemiLight);
+        const dirLight = new THREE.DirectionalLight(0xffffff, 0.6);
         dirLight.position.set(10, 20, 10);
         scene.add(dirLight);
 
         // --- ENVIRONMENT ---
-        const gridHelper = new THREE.GridHelper(200, 100, 0x00ffff, 0x003333);
+        const gridHelper = new THREE.GridHelper(200, 100, 0xff00ff, 0x00ffff);
         gridHelper.position.y = -0.5;
         scene.add(gridHelper);
 
-        // --- TEXTURE LOADING ---
-        const textureLoader = new THREE.TextureLoader();
-        // Load the astronaut image you just saved!
-        const astronautTexture = textureLoader.load('image_4.png');
+        const starGeo = new THREE.BufferGeometry();
+        const starCount = 600;
+        const starPos = new Float32Array(starCount * 3);
+        for(let i=0; i < starCount * 3; i+=3) {
+            starPos[i] = (Math.random() - 0.5) * 100; 
+            starPos[i+1] = Math.random() * 50;       
+            starPos[i+2] = (Math.random() - 0.5) * 200; 
+        }
+        starGeo.setAttribute('position', new THREE.BufferAttribute(starPos, 3));
+        const starMat = new THREE.PointsMaterial({ color: 0xffffff, size: 0.5, transparent: true, opacity: 0.8 });
+        const stars = new THREE.Points(starGeo, starMat);
+        scene.add(stars);
 
-        // --- 3D ENTITY BUILDERS ---
+        // --- ASSET MANAGEMENT ---
+        const gltfLoader = new THREE.GLTFLoader();
+        const loadedShips = [];
+        const loadedMeteors = [];
         
-        // 1. Build Player (Cute Astronaut Sprite)
-        const playerGeo = new THREE.PlaneGeometry(3.5, 3.5);
-        const playerMat = new THREE.MeshBasicMaterial({ map: astronautTexture, transparent: true, side: THREE.DoubleSide });
-        const playerGroup = new THREE.Mesh(playerGeo, playerMat);
-        playerGroup.position.set(LANE_X[currentLane], 1.5, 0);
-        scene.add(playerGroup);
+        // Define the specific models we want to load from your GitHub folder
+        const shipFiles = ['craft_speederA.gltf', 'craft_miner.gltf', 'craft_racer.gltf', 'craft_speederD.gltf'];
+        const meteorFiles = ['meteor_detailed.gltf', 'meteor_square.gltf', 'meteor_small.gltf'];
 
-        // Player Physics
-        let playerVelocityY = 0;
-        let isJumping = false;
-        const GRAVITY = -60;
-        const JUMP_FORCE = 25;
+        // We use a LoadingManager to wait until ALL files are downloaded
+        const manager = new THREE.LoadingManager();
+        manager.onLoad = function () {
+            document.getElementById('loadingText').style.display = 'none';
+            document.getElementById('startBtn').style.display = 'block';
+            gameState = 'MENU';
+            buildPlayerAndTail(); // Construct the game pieces once models are ready
+        };
+        manager.onError = function (url) {
+            console.error('Error loading:', url);
+            document.getElementById('loadingText').innerText = "Error loading models. Check folder path!";
+        };
 
-        // Player Tail/Followers (Mini Astronauts)
+        // Tell the GLTFLoader to use our manager
+        gltfLoader.manager = manager;
+
+        // Load all ships
+        shipFiles.forEach(file => {
+            gltfLoader.load(PATH + file, function(gltf) {
+                const ship = gltf.scene;
+                ship.scale.set(0.5, 0.5, 0.5);
+                ship.rotation.y = Math.PI; // Face forward
+                
+                // Add a glowing engine flame to every ship
+                const flameGeo = new THREE.ConeGeometry(0.5, 2.5, 8);
+                flameGeo.rotateX(-Math.PI / 2); 
+                const flameMat = new THREE.MeshBasicMaterial({ color: 0x00ffff }); // Cyan flame
+                const flame = new THREE.Mesh(flameGeo, flameMat);
+                flame.position.set(0, 0, 1.5); // Place at the back
+                flame.name = "flame";
+                ship.add(flame);
+
+                loadedShips.push(ship);
+            });
+        });
+
+        // Load all meteors
+        meteorFiles.forEach(file => {
+            gltfLoader.load(PATH + file, function(gltf) {
+                const meteor = gltf.scene;
+                meteor.scale.set(1.5, 1.5, 1.5); // Make meteors chunky
+                loadedMeteors.push(meteor);
+            });
+        });
+
+        // --- GAME ENTITIES ---
+        let playerGroup = new THREE.Group();
         const tailCount = 3;
         const tails = [];
         const playerHistory = []; 
 
-        for(let i=0; i<tailCount; i++) {
-            const miniAstro = playerGroup.clone();
-            miniAstro.scale.set(0.5, 0.5, 0.5); 
-            miniAstro.position.set(playerGroup.position.x, playerGroup.position.y, playerGroup.position.z + (i+1)*2);
-            scene.add(miniAstro);
-            tails.push(miniAstro);
+        function buildPlayerAndTail() {
+            // Player is the first ship we loaded
+            playerGroup.add(loadedShips[0].clone());
+            playerGroup.position.set(LANE_X[currentLane], 1.5, 0);
+            scene.add(playerGroup);
+
+            // Give the tails different ships!
+            for(let i=0; i<tailCount; i++) {
+                const tailGroup = new THREE.Group();
+                // Pick the next ship in the array, making sure we don't run out
+                const shipIndex = (i + 1) % loadedShips.length; 
+                const clonedShip = loadedShips[shipIndex].clone();
+                clonedShip.scale.set(0.4, 0.4, 0.4); // Make followers slightly smaller
+                
+                tailGroup.add(clonedShip);
+                tailGroup.position.set(playerGroup.position.x, playerGroup.position.y, playerGroup.position.z + (i+1)*2.5);
+                scene.add(tailGroup);
+                tails.push(tailGroup);
+            }
         }
 
-        // Object Pools & Geometries (Using pure 3D for these until we generate more images)
+        // Physics & Pools
+        let playerVelocityY = 0;
+        let isJumping = false;
+        const GRAVITY = -70;
+        const JUMP_FORCE = 30;
+
         let enemies = [];
         let collectibles = [];
         let projectiles = [];
+        let explosionParticles = []; 
 
-        // Enemy: Spiky Red Alien 
-        const enemyGeo = new THREE.IcosahedronGeometry(1.2, 0); 
-        const enemyMat = new THREE.MeshLambertMaterial({ color: 0xff0055, emissive: 0x550011 });
-        
-        // Collectible: Glowing Green Ring
-        const collectGeo = new THREE.TorusGeometry(0.8, 0.3, 16, 32);
-        const collectMat = new THREE.MeshLambertMaterial({ color: 0x00ffaa, emissive: 0x005533 });
-
-        // Projectile: Yellow Laser
-        const projectileGeo = new THREE.CylinderGeometry(0.2, 0.2, 2, 8);
-        const projectileMat = new THREE.MeshLambertMaterial({ color: 0xffff00, emissive: 0xaaaa00 });
-
+        // Glowing Gold Star (Pure 3D shape)
+        const collectGeo = new THREE.OctahedronGeometry(1.2, 0);
+        const collectMat = new THREE.MeshLambertMaterial({ color: 0xffff00, emissive: 0xaa8800 });
+        // Laser Projectile
+        const projectileGeo = new THREE.CylinderGeometry(0.15, 0.15, 8, 8);
+        projectileGeo.rotateX(Math.PI / 2); 
+        const projectileMat = new THREE.MeshBasicMaterial({ color: 0x00ffff }); 
 
         // --- INPUT HANDLING ---
         window.addEventListener('keydown', (e) => {
             if (gameState !== 'PLAYING') return;
-
             if ((e.key === 'ArrowLeft' || e.key === 'a') && currentLane > 0) {
                 currentLane--;
             } else if ((e.key === 'ArrowRight' || e.key === 'd') && currentLane < 2) {
@@ -194,20 +286,46 @@
         // --- GAME LOGIC FUNCTIONS ---
         function spawnProjectile() {
             const mesh = new THREE.Mesh(projectileGeo, projectileMat);
-            mesh.position.set(playerGroup.position.x, playerGroup.position.y, playerGroup.position.z - 1);
-            mesh.rotation.x = Math.PI / 2; 
+            mesh.position.set(playerGroup.position.x, playerGroup.position.y, playerGroup.position.z - 2);
             scene.add(mesh);
             projectiles.push(mesh);
+        }
+
+        function createExplosion(x, y, z, colorHex) {
+            const particleCount = 20;
+            const geo = new THREE.BoxGeometry(0.4, 0.4, 0.4);
+            const mat = new THREE.MeshBasicMaterial({ color: colorHex });
+            for (let i = 0; i < particleCount; i++) {
+                const mesh = new THREE.Mesh(geo, mat);
+                mesh.position.set(x, y, z);
+                mesh.velocity = new THREE.Vector3(
+                    (Math.random() - 0.5) * 50,
+                    (Math.random() - 0.5) * 50,
+                    (Math.random() - 0.5) * 50
+                );
+                mesh.life = 1.0; 
+                scene.add(mesh);
+                explosionParticles.push(mesh);
+            }
         }
 
         function spawnObject(type) {
             const laneIndex = Math.floor(Math.random() * 3);
             const xPos = LANE_X[laneIndex];
-            const zPos = -150; 
+            const zPos = -200; 
 
             if (type === 'ENEMY') {
-                const mesh = new THREE.Mesh(enemyGeo, enemyMat);
+                // Pick a RANDOM meteor model from the ones we loaded!
+                const randomMeteor = loadedMeteors[Math.floor(Math.random() * loadedMeteors.length)];
+                const mesh = randomMeteor.clone();
                 mesh.position.set(xPos, 1.5, zPos);
+                
+                // Give each meteor a random spin speed
+                mesh.userData = {
+                    rotX: (Math.random() - 0.5) * 5,
+                    rotY: (Math.random() - 0.5) * 5
+                };
+                
                 scene.add(mesh);
                 enemies.push(mesh);
             } else if (type === 'COLLECTIBLE') {
@@ -222,9 +340,11 @@
             enemies.forEach(e => scene.remove(e));
             collectibles.forEach(c => scene.remove(c));
             projectiles.forEach(p => scene.remove(p));
+            explosionParticles.forEach(p => scene.remove(p));
             enemies = [];
             collectibles = [];
             projectiles = [];
+            explosionParticles = [];
             playerHistory.length = 0;
 
             currentLane = 1;
@@ -236,7 +356,7 @@
             document.getElementById('scoreValue').innerText = score;
 
             tails.forEach((t, i) => {
-                t.position.set(playerGroup.position.x, playerGroup.position.y, (i+1)*2.5);
+                t.position.set(playerGroup.position.x, playerGroup.position.y, (i+1)*3);
             });
 
             document.getElementById('startMenu').classList.add('hidden');
@@ -248,13 +368,14 @@
 
         function checkCollisions() {
             const playerBox = new THREE.Box3().setFromObject(playerGroup);
-            playerBox.expandByScalar(-0.4); 
+            playerBox.expandByScalar(-0.6); 
 
             for (let i = enemies.length - 1; i >= 0; i--) {
                 const enemyBox = new THREE.Box3().setFromObject(enemies[i]);
-                enemyBox.expandByScalar(-0.2); 
+                enemyBox.expandByScalar(-0.3); 
 
                 if (playerBox.intersectsBox(enemyBox)) {
+                    createExplosion(playerGroup.position.x, playerGroup.position.y, playerGroup.position.z, 0x00ffff);
                     triggerGameOver();
                     return;
                 }
@@ -264,7 +385,7 @@
                     if (projectileBox.intersectsBox(enemyBox)) {
                         score += 50;
                         document.getElementById('scoreValue').innerText = score;
-                        
+                        createExplosion(enemies[i].position.x, enemies[i].position.y, enemies[i].position.z, 0xff0055);
                         scene.remove(enemies[i]);
                         enemies.splice(i, 1);
                         scene.remove(projectiles[j]);
@@ -279,6 +400,7 @@
                 if (playerBox.intersectsBox(collectBox)) {
                     score += 100;
                     document.getElementById('scoreValue').innerText = score;
+                    createExplosion(collectibles[i].position.x, collectibles[i].position.y, collectibles[i].position.z, 0xffff00);
                     scene.remove(collectibles[i]);
                     collectibles.splice(i, 1);
                 }
@@ -295,6 +417,16 @@
         document.getElementById('startBtn').addEventListener('click', resetGame);
         document.getElementById('restartBtn').addEventListener('click', resetGame);
 
+        // Helper to animate flames
+        function animateFlames(group) {
+            group.traverse(child => {
+                if (child.name === 'flame') {
+                    child.scale.z = 0.5 + Math.random() * 1.5; 
+                }
+            });
+        }
+
+        // --- MAIN UPDATE LOOP ---
         const clock = new THREE.Clock();
 
         function animate() {
@@ -303,14 +435,30 @@
 
             if (delta > 0.1) return; 
 
+            if (gameState !== 'LOADING') {
+                animateFlames(playerGroup);
+                tails.forEach(tail => animateFlames(tail));
+            }
+
+            for (let i = explosionParticles.length - 1; i >= 0; i--) {
+                let p = explosionParticles[i];
+                p.position.addScaledVector(p.velocity, delta); 
+                p.life -= delta * 2; 
+                p.scale.setScalar(Math.max(0, p.life)); 
+                if (p.life <= 0) {
+                    scene.remove(p);
+                    explosionParticles.splice(i, 1);
+                }
+            }
+
             if (gameState === 'PLAYING') {
                 const targetX = LANE_X[currentLane];
                 playerGroup.position.x += (targetX - playerGroup.position.x) * 15 * delta;
+                playerGroup.rotation.z = (playerGroup.position.x - targetX) * -0.15; // Deeper tilt
 
                 if (isJumping) {
                     playerGroup.position.y += playerVelocityY * delta;
                     playerVelocityY += GRAVITY * delta;
-
                     if (playerGroup.position.y <= 1.5) {
                         playerGroup.position.y = 1.5;
                         isJumping = false;
@@ -326,6 +474,7 @@
                     if (playerHistory[historyIndex]) {
                         tail.position.x = playerHistory[historyIndex].x;
                         tail.position.y = playerHistory[historyIndex].y;
+                        tail.rotation.z = (tail.position.x - LANE_X[currentLane]) * -0.15;
                     }
                 });
 
@@ -334,8 +483,15 @@
                 gridHelper.position.z += currentSpeed * delta;
                 if (gridHelper.position.z > 10) gridHelper.position.z = 0;
 
+                const positions = stars.geometry.attributes.position.array;
+                for(let i=2; i < starCount * 3; i+=3) {
+                    positions[i] += (currentSpeed * 1.5) * delta;
+                    if(positions[i] > 20) positions[i] = -200; 
+                }
+                stars.geometry.attributes.position.needsUpdate = true;
+
                 for (let i = projectiles.length - 1; i >= 0; i--) {
-                    projectiles[i].position.z -= (currentSpeed * 2.5) * delta; 
+                    projectiles[i].position.z -= (currentSpeed * 4) * delta; 
                     if (projectiles[i].position.z < -200) {
                         scene.remove(projectiles[i]);
                         projectiles.splice(i, 1);
@@ -344,8 +500,10 @@
 
                 for (let i = enemies.length - 1; i >= 0; i--) {
                     enemies[i].position.z += currentSpeed * delta;
-                    enemies[i].rotation.x += 2 * delta;
-                    enemies[i].rotation.y += 3 * delta;
+                    // Apply random rotation based on userData set during spawn
+                    enemies[i].rotation.x += enemies[i].userData.rotX * delta;
+                    enemies[i].rotation.y += enemies[i].userData.rotY * delta;
+                    
                     if (enemies[i].position.z > 10) {
                         scene.remove(enemies[i]);
                         enemies.splice(i, 1);
@@ -356,18 +514,23 @@
 
                 for (let i = collectibles.length - 1; i >= 0; i--) {
                     collectibles[i].position.z += currentSpeed * delta;
-                    collectibles[i].rotation.y += 3 * delta;
+                    collectibles[i].rotation.x += 2 * delta;
+                    collectibles[i].rotation.y += 4 * delta;
                     if (collectibles[i].position.z > 10) {
                         scene.remove(collectibles[i]);
                         collectibles.splice(i, 1);
                     }
                 }
 
-                if (Math.random() < 0.03 + (speedMultiplier * 0.005)) spawnObject('ENEMY');
-                if (Math.random() < 0.02) spawnObject('COLLECTIBLE');
+                if (Math.random() < 0.04 + (speedMultiplier * 0.005)) spawnObject('ENEMY');
+                if (Math.random() < 0.03) spawnObject('COLLECTIBLE');
 
                 checkCollisions();
                 speedMultiplier += 0.01 * delta;
+            }
+
+            if (gameState === 'MENU' && playerGroup.position) {
+                playerGroup.position.y = 1.5 + Math.sin(Date.now() * 0.003) * 0.3;
             }
 
             renderer.render(scene, camera);
