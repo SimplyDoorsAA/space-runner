@@ -3,12 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Astro Platformer</title>
+    <title>Astro Jump!</title>
     <style>
         body { 
             margin: 0; 
             overflow: hidden; 
-            background-color: #87CEEB; /* Bright Sky Blue */
+            background-color: #6185f8; 
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
             user-select: none;
         }
@@ -26,18 +26,18 @@
             color: #ffffff;
             font-size: 40px;
             font-weight: 900;
-            text-shadow: 2px 2px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000;
+            text-shadow: 3px 3px 0 #000;
             display: none;
         }
         .menu { 
-            background: rgba(255, 255, 255, 0.9); 
-            padding: 50px; 
-            border-radius: 20px; 
-            border: 5px solid #ffcc00;
+            background: rgba(255, 255, 255, 0.95); 
+            padding: 40px 60px; 
+            border-radius: 15px; 
+            border: 4px solid #333;
             text-align: center; 
             color: #333; 
             pointer-events: auto; 
-            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            box-shadow: 10px 10px 0px rgba(0,0,0,0.2);
         }
         h1 { 
             margin-top: 0; 
@@ -45,32 +45,32 @@
             font-size: 60px; 
             text-transform: uppercase; 
             letter-spacing: 2px; 
-            text-shadow: 2px 2px 0px #fff, 4px 4px 0px rgba(0,0,0,0.1);
+            text-shadow: 3px 3px 0 #333;
         }
-        p { font-size: 22px; color: #555; line-height: 1.6; font-weight: bold; }
+        p { font-size: 22px; color: #444; line-height: 1.6; font-weight: bold; }
         .highlight { color: #ff3366; }
-        .collect { color: #00cc00; }
+        .collect { color: #f2a900; }
         button { 
             background: #ffcc00; 
             color: #333; 
-            border: none; 
+            border: 3px solid #333; 
             padding: 15px 50px; 
             font-size: 28px; 
-            border-radius: 50px; 
+            border-radius: 10px; 
             cursor: pointer; 
             text-transform: uppercase; 
             font-weight: 900; 
             margin-top: 20px;
-            box-shadow: 0 6px 0 #cc9900;
+            box-shadow: 4px 4px 0 #333;
             transition: all 0.1s;
         }
         button:active { 
-            transform: translateY(6px);
-            box-shadow: 0 0 0 #cc9900;
+            transform: translate(4px, 4px);
+            box-shadow: 0px 0px 0 #333;
         }
         #loadingText {
-            color: #ff3366;
-            font-size: 28px;
+            color: #333;
+            font-size: 24px;
             margin-bottom: 20px;
             animation: pulse 1s infinite;
             font-weight: bold;
@@ -90,18 +90,18 @@
     <div id="uiLayer">
         <div id="startMenu" class="menu">
             <h1>Astro Jump!</h1>
-            <div id="loadingText">Loading Models...</div>
+            <div id="loadingText">Downloading 3D Assets...</div>
             <p>
                 <b>Left/Right Arrows</b> to Run.<br>
                 <b>Up Arrow</b> to Jump.<br>
             </p>
-            <p>Jump on top of <span class="highlight">Aliens</span> to bounce!<br>Jump over the <span class="collect">Barrels</span>.</p>
+            <p>Stomp the <span class="highlight">Aliens</span> for loot!<br>Jump over the <span class="collect">Barrels</span>.</p>
             <button id="startBtn" style="display: none;">Let's Go!</button>
         </div>
 
         <div id="gameOverMenu" class="menu hidden">
             <h1 style="color: #ff3366;">OUCH!</h1>
-            <p>Final Score: <span id="finalScore" style="color: #ffcc00; font-size: 40px; font-weight: bold; text-shadow: 1px 1px 0 #000;">0</span></p>
+            <p>Final Score: <span id="finalScore" style="color: #f2a900; font-size: 40px; font-weight: bold; text-shadow: 2px 2px 0 #333;">0</span></p>
             <button id="restartBtn">Play Again</button>
         </div>
     </div>
@@ -114,63 +114,72 @@
         let gameState = 'LOADING'; 
         let score = 0;
         
-        // Physics Constants
-        const GRAVITY = -80;
-        const JUMP_FORCE = 35;
-        const MOVE_SPEED = 15;
-        const GROUND_Y = 1.5; // Where the player's feet touch the floor
+        const GRAVITY = -85;
+        const JUMP_FORCE = 32;
+        const MOVE_SPEED = 18;
+        const GROUND_Y = 1.0; 
 
-        // Player State
         let playerVelY = 0;
         let playerVelX = 0;
         let isJumping = false;
 
-        // Path to your GitHub folder
-        const PATH = 'SpaceShip%20Images/'; 
-
-        // Inputs
+        // OPTIMIZATION: Removed the %20, browser handles literal spaces better natively.
+        const PATH = 'SpaceShip Images/'; 
         const keys = { right: false, left: false, up: false };
 
         // --- SCENE SETUP ---
         const scene = new THREE.Scene();
-        scene.background = new THREE.Color(0x87CEEB); // Bright Sky Blue
-        
-        // Give it a slight fog to blend the horizon
-        scene.fog = new THREE.Fog(0x87CEEB, 20, 60);
+        scene.background = new THREE.Color(0x6185f8); 
+        scene.fog = new THREE.Fog(0x6185f8, 20, 70);
 
-        // 2.5D Camera Setup (Looking at the side)
-        const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 200);
-        camera.position.set(0, 8, 18); // Backed up and looking from the side
-        camera.lookAt(0, 4, 0);
+        const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 200);
+        camera.position.set(0, 6, 16); 
+        camera.lookAt(0, 3, 0);
 
         const renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
         document.body.appendChild(renderer.domElement);
 
         // --- LIGHTING ---
-        // Bright, cheerful lighting
-        const ambientLight = new THREE.AmbientLight(0xffffff, 1.2); 
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.7); 
         scene.add(ambientLight);
         
         const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
-        dirLight.position.set(10, 20, 20);
+        dirLight.position.set(5, 20, 15);
+        dirLight.castShadow = true; 
+        
+        // OPTIMIZATION: Increased shadow resolution for crisp shadows
+        dirLight.shadow.mapSize.width = 1024;
+        dirLight.shadow.mapSize.height = 1024;
+        
+        // Ensure the light reaches far enough to cast shadows
+        dirLight.shadow.camera.top = 20;
+        dirLight.shadow.camera.bottom = -20;
+        dirLight.shadow.camera.left = -20;
+        dirLight.shadow.camera.right = 20;
+        dirLight.shadow.camera.near = 0.5;
+        dirLight.shadow.camera.far = 50;
+
         scene.add(dirLight);
+        // CRITICAL BUG FIX: The target must be added to the scene for the light to track it!
+        scene.add(dirLight.target); 
 
         // --- ENVIRONMENT ---
-        // Solid green ground plane
         const groundGeo = new THREE.BoxGeometry(2000, 10, 10);
-        const groundMat = new THREE.MeshLambertMaterial({ color: 0x32CD32 }); // Lime Green
+        const groundMat = new THREE.MeshLambertMaterial({ color: 0x55cc55 }); 
         const ground = new THREE.Mesh(groundGeo, groundMat);
-        ground.position.set(500, -3.5, 0); // Positioned so top is at Y=1.5
+        ground.position.set(500, -4.0, 0); 
+        ground.receiveShadow = true; 
         scene.add(ground);
 
-        // Add some background clouds (simple white boxes far back)
-        const cloudGeo = new THREE.BoxGeometry(4, 2, 2);
-        const cloudMat = new THREE.MeshLambertMaterial({ color: 0xffffff });
-        for(let i=0; i<50; i++) {
-            const cloud = new THREE.Mesh(cloudGeo, cloudMat);
-            cloud.position.set((Math.random() - 0.2) * 500, 10 + Math.random() * 10, -10 - Math.random() * 10);
-            scene.add(cloud);
+        const hillGeo = new THREE.SphereGeometry(15, 32, 16);
+        const hillMat = new THREE.MeshLambertMaterial({ color: 0x3cb371 });
+        for(let i=0; i<20; i++) {
+            const hill = new THREE.Mesh(hillGeo, hillMat);
+            hill.position.set(-50 + (i * 30), -5, -15);
+            scene.add(hill);
         }
 
         // --- ASSET MANAGEMENT ---
@@ -188,45 +197,39 @@
         };
         manager.onError = function (url) {
             console.error('Error loading:', url);
-            document.getElementById('loadingText').innerText = "File not found! Check spelling in code.";
+            document.getElementById('loadingText').innerText = "Asset Error. Using Fallbacks.";
+            // If it fails, start anyway with fallback blocks
+            document.getElementById('startBtn').style.display = 'block';
+            gameState = 'MENU';
+            buildLevel(); 
         };
 
         gltfLoader.manager = manager;
 
-        // Function to fix dark materials on .glb files
-        function fixMaterials(model) {
+        function setupModel(model, scale) {
+            model.scale.set(scale, scale, scale);
             model.traverse((child) => {
-                if (child.isMesh && child.material) {
-                    child.material.metalness = 0.0; 
-                    child.material.roughness = 1.0; 
-                    child.material.emissive = child.material.color || new THREE.Color(0x000000);
-                    child.material.emissiveIntensity = 0.3; // Give it a cartoon glow
+                if (child.isMesh) {
+                    child.castShadow = true; 
+                    child.receiveShadow = true;
                 }
             });
+            return model;
         }
 
-        // Load Player
-        gltfLoader.load(PATH + 'astronautA.glb', function(gltf) {
-            playerModel = gltf.scene;
-            fixMaterials(playerModel);
-            playerModel.scale.set(3.5, 3.5, 3.5); 
-            // Face the player to the right (side-scroller view)
+        // Load Models
+        gltfLoader.load(PATH + 'astronautA.glb', (gltf) => {
+            playerModel = setupModel(gltf.scene, 2.5);
             playerModel.rotation.y = Math.PI / 2; 
         });
 
-        // Load Alien (Enemy)
-        gltfLoader.load(PATH + 'alien.glb', function(gltf) {
-            alienModel = gltf.scene;
-            fixMaterials(alienModel);
-            alienModel.scale.set(3, 3, 3); 
-            alienModel.rotation.y = -Math.PI / 2; // Face left towards player
+        gltfLoader.load(PATH + 'alien.glb', (gltf) => {
+            alienModel = setupModel(gltf.scene, 2.5);
+            alienModel.rotation.y = -Math.PI / 2; 
         });
 
-        // Load Barrel (Obstacle)
-        gltfLoader.load(PATH + 'barrel.glb', function(gltf) {
-            barrelModel = gltf.scene;
-            fixMaterials(barrelModel);
-            barrelModel.scale.set(3, 3, 3); 
+        gltfLoader.load(PATH + 'barrel.glb', (gltf) => {
+            barrelModel = setupModel(gltf.scene, 2.5);
         });
 
         // --- GAME ENTITIES ---
@@ -234,40 +237,89 @@
         let enemies = [];
         let obstacles = [];
         let particles = [];
+        let coins = []; 
 
         function buildLevel() {
-            // Add Player
+            // SAFETY FALLBACK: If GitHub fails to load the model, make a blue box
             if(playerModel) {
                 playerGroup.add(playerModel.clone());
+            } else {
+                const fallbackGeo = new THREE.BoxGeometry(1.5, 2.5, 1.5);
+                const fallbackMat = new THREE.MeshLambertMaterial({color: 0x00aaff});
+                const fallbackMesh = new THREE.Mesh(fallbackGeo, fallbackMat);
+                fallbackMesh.castShadow = true;
+                fallbackMesh.position.y = 1.25;
+                playerGroup.add(fallbackMesh);
             }
+            
             playerGroup.position.set(0, GROUND_Y, 0);
             scene.add(playerGroup);
-
             generateCourse();
         }
 
         function generateCourse() {
-            // Generate a long track of obstacles and enemies
-            let currentX = 20; // Start spawning ahead of player
-            
-            for(let i=0; i < 100; i++) { // Build 100 chunks
-                // Random gap between objects
-                currentX += 10 + Math.random() * 15; 
-
+            let currentX = 25; 
+            for(let i=0; i < 80; i++) { 
+                currentX += 12 + Math.random() * 15; 
                 const rand = Math.random();
-                if (rand < 0.5 && alienModel) {
-                    // Spawn Alien
-                    const alien = alienModel.clone();
-                    alien.position.set(currentX, GROUND_Y, 0);
-                    scene.add(alien);
-                    enemies.push({ mesh: alien, active: true });
-                } else if (barrelModel) {
-                    // Spawn Barrel
-                    const barrel = barrelModel.clone();
-                    barrel.position.set(currentX, GROUND_Y, 0);
-                    scene.add(barrel);
-                    obstacles.push({ mesh: barrel, active: true });
+                
+                if (rand < 0.5) {
+                    let mesh;
+                    if (alienModel) {
+                        mesh = alienModel.clone();
+                    } else {
+                        // Fallback Red Box
+                        mesh = new THREE.Mesh(new THREE.BoxGeometry(1.5, 2, 1.5), new THREE.MeshLambertMaterial({color: 0xff0055}));
+                        mesh.castShadow = true;
+                        mesh.position.y = 1.0;
+                    }
+                    mesh.position.set(currentX, GROUND_Y, 0);
+                    scene.add(mesh);
+                    enemies.push({ mesh: mesh, active: true });
+                } else {
+                    let mesh;
+                    if (barrelModel) {
+                        mesh = barrelModel.clone();
+                    } else {
+                        // Fallback Orange Box
+                        mesh = new THREE.Mesh(new THREE.BoxGeometry(2, 2, 2), new THREE.MeshLambertMaterial({color: 0xff8800}));
+                        mesh.castShadow = true;
+                        mesh.position.y = 1.0;
+                    }
+                    mesh.position.set(currentX, GROUND_Y, 0);
+                    scene.add(mesh);
+                    obstacles.push({ mesh: mesh, active: true });
                 }
+            }
+        }
+
+        // --- EFFECTS ---
+        const coinGeo = new THREE.CylinderGeometry(0.4, 0.4, 0.1, 16);
+        coinGeo.rotateX(Math.PI / 2);
+        const coinMat = new THREE.MeshLambertMaterial({ color: 0xffdd00 });
+
+        function createLootExplosion(x, y, z) {
+            for (let i = 0; i < 5; i++) {
+                const coin = new THREE.Mesh(coinGeo, coinMat);
+                coin.position.set(x, y, z);
+                coin.castShadow = true;
+                coin.velocity = new THREE.Vector3((Math.random() - 0.5) * 10, Math.random() * 15 + 10, (Math.random() - 0.5) * 5);
+                coin.life = 2.0; 
+                scene.add(coin);
+                coins.push(coin);
+            }
+        }
+
+        function createDustPoof(x, y, z) {
+            const geo = new THREE.BoxGeometry(0.3, 0.3, 0.3);
+            const mat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+            for (let i = 0; i < 6; i++) {
+                const mesh = new THREE.Mesh(geo, mat);
+                mesh.position.set(x + (Math.random()-0.5), y, z);
+                mesh.velocity = new THREE.Vector3((Math.random()-0.5)*5, Math.random()*5, 0);
+                mesh.life = 0.5; 
+                scene.add(mesh);
+                particles.push(mesh);
             }
         }
 
@@ -279,6 +331,7 @@
                 if (!isJumping && gameState === 'PLAYING') {
                     playerVelY = JUMP_FORCE;
                     isJumping = true;
+                    createDustPoof(playerGroup.position.x, GROUND_Y, playerGroup.position.z);
                 }
             }
         });
@@ -294,37 +347,18 @@
             renderer.setSize(window.innerWidth, window.innerHeight);
         });
 
-        // --- EFFECTS ---
-        function createPoof(x, y, z, colorHex) {
-            // A simple cartoon "poof" particle effect when an enemy is hit
-            const particleCount = 10;
-            const geo = new THREE.BoxGeometry(0.5, 0.5, 0.5);
-            const mat = new THREE.MeshBasicMaterial({ color: colorHex });
-            for (let i = 0; i < particleCount; i++) {
-                const mesh = new THREE.Mesh(geo, mat);
-                mesh.position.set(x, y + 1, z);
-                mesh.velocity = new THREE.Vector3(
-                    (Math.random() - 0.5) * 15,
-                    Math.random() * 15 + 5,
-                    (Math.random() - 0.5) * 15
-                );
-                mesh.life = 1.0; 
-                scene.add(mesh);
-                particles.push(mesh);
-            }
-        }
-
         // --- GAME LOGIC ---
         function resetGame() {
-            // Clean up old level
             enemies.forEach(e => scene.remove(e.mesh));
             obstacles.forEach(o => scene.remove(o.mesh));
             particles.forEach(p => scene.remove(p));
+            coins.forEach(c => scene.remove(c));
+            
             enemies = [];
             obstacles = [];
             particles = [];
+            coins = [];
 
-            // Reset Player
             playerGroup.position.set(0, GROUND_Y, 0);
             playerVelY = 0;
             isJumping = false;
@@ -344,49 +378,44 @@
         }
 
         function checkCollisions() {
-            const playerBox = new THREE.Box3().setFromObject(playerGroup);
-            // Shrink the player hitbox to make the game feel fair and forgiving
-            playerBox.expandByScalar(-0.6); 
+            // OPTIMIZATION: Switched to Distance-based checking instead of heavy Bounding Boxes
+            const pX = playerGroup.position.x;
+            const pY = playerGroup.position.y;
 
             // Check Aliens
             for (let i = 0; i < enemies.length; i++) {
                 if (!enemies[i].active) continue;
                 
-                const enemyBox = new THREE.Box3().setFromObject(enemies[i].mesh);
-                enemyBox.expandByScalar(-0.4);
+                const eX = enemies[i].mesh.position.x;
+                const eY = enemies[i].mesh.position.y;
+                
+                // Fast distance check (Pythagorean theorem basically)
+                const dist = Math.sqrt((pX - eX)**2 + (pY - eY)**2);
 
-                if (playerBox.intersectsBox(enemyBox)) {
-                    // MARIO MECHANIC: Are we falling onto the alien?
-                    // If player's bottom is above the alien's center, and we are moving down
-                    if (playerVelY < 0 && playerGroup.position.y > enemies[i].mesh.position.y + 1) {
-                        // SQUASH!
+                if (dist < 2.0) { // Collision radius
+                    if (playerVelY < 0 && pY > eY + 0.8) {
+                        // Stomp!
                         enemies[i].active = false;
                         scene.remove(enemies[i].mesh);
-                        createPoof(enemies[i].mesh.position.x, enemies[i].mesh.position.y, 0, 0xff3366);
-                        
-                        // Bounce the player up!
-                        playerVelY = JUMP_FORCE * 0.8; 
+                        createLootExplosion(eX, eY + 1, 0);
+                        playerVelY = JUMP_FORCE * 0.7; 
                         isJumping = true;
-                        
-                        score += 100;
-                        document.getElementById('scoreValue').innerText = score;
-                    } else {
-                        // Hit from the side - Game Over!
+                    } else if (dist < 1.5) { // Tighter tolerance for side hits
                         triggerGameOver();
                         return;
                     }
                 }
             }
 
-            // Check Barrels (Solid Obstacles)
+            // Check Barrels
             for (let i = 0; i < obstacles.length; i++) {
                 if (!obstacles[i].active) continue;
                 
-                const barrelBox = new THREE.Box3().setFromObject(obstacles[i].mesh);
-                barrelBox.expandByScalar(-0.2);
+                const oX = obstacles[i].mesh.position.x;
+                const oY = obstacles[i].mesh.position.y;
+                const dist = Math.sqrt((pX - oX)**2 + (pY - oY)**2);
 
-                if (playerBox.intersectsBox(barrelBox)) {
-                    // Block the player from moving forward
+                if (dist < 1.5) {
                     triggerGameOver();
                     return;
                 }
@@ -410,15 +439,35 @@
             requestAnimationFrame(animate);
             const delta = clock.getDelta();
 
-            // Cap delta time to prevent physics explosions if tab is inactive
             if (delta > 0.1) return; 
 
-            // Update Particles
+            // Animate Loot Coins
+            for (let i = coins.length - 1; i >= 0; i--) {
+                let c = coins[i];
+                c.position.addScaledVector(c.velocity, delta); 
+                c.velocity.y += GRAVITY * delta; 
+                c.rotation.y += 10 * delta; 
+
+                if (c.position.y <= GROUND_Y) {
+                    c.position.y = GROUND_Y;
+                    c.velocity.y *= -0.5; 
+                    c.velocity.x *= 0.8; 
+                }
+
+                c.life -= delta; 
+                if (c.life <= 0) {
+                    scene.remove(c);
+                    coins.splice(i, 1);
+                    score += 50; 
+                    document.getElementById('scoreValue').innerText = score;
+                }
+            }
+
+            // Animate Particles
             for (let i = particles.length - 1; i >= 0; i--) {
                 let p = particles[i];
                 p.position.addScaledVector(p.velocity, delta); 
-                p.velocity.y += GRAVITY * delta; // Particles fall too
-                p.life -= delta * 2; 
+                p.life -= delta; 
                 p.scale.setScalar(Math.max(0, p.life)); 
                 if (p.life <= 0) {
                     scene.remove(p);
@@ -427,59 +476,49 @@
             }
 
             if (gameState === 'PLAYING') {
-                // Horizontal Movement
                 if (keys.right) {
                     playerVelX = MOVE_SPEED;
-                    // Tilt forward slightly when running
-                    playerGroup.rotation.z = -0.2;
-                    // Face right
-                    if(playerModel) playerModel.rotation.y = Math.PI / 2;
+                    if(playerModel) {
+                        playerModel.rotation.y = Math.PI / 2;
+                        if (!isJumping) playerModel.rotation.z = Math.sin(Date.now() * 0.02) * 0.2; 
+                    }
                 } else if (keys.left) {
-                    // Only let them move left if they aren't going backwards past the camera
-                    if (playerGroup.position.x > camera.position.x - 10) {
+                    if (playerGroup.position.x > camera.position.x - 12) {
                         playerVelX = -MOVE_SPEED;
-                        playerGroup.rotation.z = 0.2;
-                        // Face left
-                        if(playerModel) playerModel.rotation.y = -Math.PI / 2;
+                        if(playerModel) {
+                            playerModel.rotation.y = -Math.PI / 2;
+                            if (!isJumping) playerModel.rotation.z = Math.sin(Date.now() * 0.02) * 0.2;
+                        }
                     } else {
                         playerVelX = 0;
-                        playerGroup.rotation.z = 0;
                     }
                 } else {
                     playerVelX = 0;
-                    playerGroup.rotation.z = 0;
+                    if(playerModel) playerModel.rotation.z = 0; 
                 }
 
-                // Apply Horizontal movement
                 playerGroup.position.x += playerVelX * delta;
-
-                // Apply Vertical physics (Gravity)
                 playerVelY += GRAVITY * delta;
                 playerGroup.position.y += playerVelY * delta;
 
-                // Floor Collision
                 if (playerGroup.position.y <= GROUND_Y) {
+                    if (isJumping && playerVelY < -10) {
+                        createDustPoof(playerGroup.position.x, GROUND_Y, playerGroup.position.z); 
+                    }
                     playerGroup.position.y = GROUND_Y;
                     playerVelY = 0;
                     isJumping = false;
                 }
 
-                // Camera smoothly follows player's X position, stays looking at them
-                const targetCameraX = playerGroup.position.x + 5; // Look slightly ahead
-                camera.position.x += (targetCameraX - camera.position.x) * 5 * delta;
-                
-                // Add points just for moving right!
-                if (playerVelX > 0) {
-                    score += Math.floor(MOVE_SPEED * delta);
-                    document.getElementById('scoreValue').innerText = score;
-                }
+                const targetCameraX = playerGroup.position.x + 6; 
+                camera.position.x += (targetCameraX - camera.position.x) * 6 * delta;
+
+                // BUG FIX: Dynamic Light Tracking so shadows never disappear!
+                dirLight.position.x = playerGroup.position.x + 5;
+                dirLight.target.position.x = playerGroup.position.x;
+                dirLight.target.updateMatrixWorld(); // Forces the light to aim properly
 
                 checkCollisions();
-            }
-
-            // Idle animation for menu
-            if (gameState === 'MENU' && playerGroup.position) {
-                playerGroup.position.y = GROUND_Y + Math.sin(Date.now() * 0.005) * 0.5;
             }
 
             renderer.render(scene, camera);
