@@ -8,12 +8,12 @@
         body { 
             margin: 0; 
             overflow: hidden; 
-            background-color: #6185f8; 
+            background-color: #87CEEB; /* Upgraded to a brighter Sky Blue */
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
             user-select: none;
             -webkit-user-select: none;
             -webkit-touch-callout: none;
-            touch-action: none; /* Prevents default browser gestures on iPad */
+            touch-action: none; 
         }
         #uiLayer { 
             position: absolute; 
@@ -87,7 +87,6 @@
         }
         .hidden { display: none !important; }
 
-        /* Mobile Touch Controls UI */
         #touchControls {
             position: absolute;
             bottom: 40px;
@@ -177,13 +176,12 @@
         let playerVelX = 0;
         let isJumping = false;
 
-        // URL encoded space to ensure GitHub Pages fetches correctly
         const PATH = 'SpaceShip%20Images/'; 
         const keys = { right: false, left: false, up: false };
 
         const scene = new THREE.Scene();
-        scene.background = new THREE.Color(0x6185f8); 
-        scene.fog = new THREE.Fog(0x6185f8, 20, 70);
+        scene.background = new THREE.Color(0x87CEEB); // Sky blue
+        scene.fog = new THREE.Fog(0x87CEEB, 20, 80); // Smooth fade into the background
 
         const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 200);
         camera.position.set(0, 6, 16); 
@@ -193,39 +191,52 @@
         renderer.setSize(window.innerWidth, window.innerHeight);
         renderer.shadowMap.enabled = true;
         renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        
+        // Advanced lighting/color encoding for professional look
+        renderer.outputEncoding = THREE.sRGBEncoding; 
+        renderer.toneMapping = THREE.ACESFilmicToneMapping;
+        renderer.toneMappingExposure = 1.1; // Brightens up the scene slightly
+        
         document.body.appendChild(renderer.domElement);
 
-        const ambientLight = new THREE.AmbientLight(0xffffff, 0.7); 
-        scene.add(ambientLight);
+        const hemiLight = new THREE.HemisphereLight(0xffffff, 0x444444, 0.8);
+        hemiLight.position.set(0, 20, 0);
+        scene.add(hemiLight);
         
-        const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
-        dirLight.position.set(5, 20, 15);
+        const dirLight = new THREE.DirectionalLight(0xffffff, 1.0);
+        dirLight.position.set(10, 20, 15);
         dirLight.castShadow = true; 
         
-        dirLight.shadow.mapSize.width = 1024;
-        dirLight.shadow.mapSize.height = 1024;
-        dirLight.shadow.camera.top = 20;
-        dirLight.shadow.camera.bottom = -20;
-        dirLight.shadow.camera.left = -20;
-        dirLight.shadow.camera.right = 20;
+        dirLight.shadow.mapSize.width = 2048; // Sharper shadows
+        dirLight.shadow.mapSize.height = 2048;
+        dirLight.shadow.camera.top = 25;
+        dirLight.shadow.camera.bottom = -25;
+        dirLight.shadow.camera.left = -25;
+        dirLight.shadow.camera.right = 25;
         dirLight.shadow.camera.near = 0.5;
         dirLight.shadow.camera.far = 50;
+        dirLight.shadow.bias = -0.001; // Prevents shadow artifacting
 
         scene.add(dirLight);
         scene.add(dirLight.target); 
 
+        // Upgraded procedural geometry materials to MeshStandardMaterial
         const groundGeo = new THREE.BoxGeometry(2000, 10, 10);
-        const groundMat = new THREE.MeshLambertMaterial({ color: 0x55cc55 }); 
+        const groundMat = new THREE.MeshStandardMaterial({ color: 0x55cc55, roughness: 0.8, metalness: 0.1 }); 
         const ground = new THREE.Mesh(groundGeo, groundMat);
         ground.position.set(500, -4.0, 0); 
         ground.receiveShadow = true; 
         scene.add(ground);
 
         const hillGeo = new THREE.SphereGeometry(15, 32, 16);
-        const hillMat = new THREE.MeshLambertMaterial({ color: 0x3cb371 });
-        for(let i=0; i<20; i++) {
+        const hillMat = new THREE.MeshStandardMaterial({ color: 0x3cb371, roughness: 0.9 });
+        for(let i=0; i<30; i++) { // Added a few more hills
             const hill = new THREE.Mesh(hillGeo, hillMat);
-            hill.position.set(-50 + (i * 30), -5, -15);
+            // Randomize size slightly for a more natural look
+            const scale = 0.8 + Math.random() * 0.5;
+            hill.scale.set(scale, scale, scale);
+            hill.position.set(-50 + (i * 25), -5, -25 - (Math.random() * 10)); // Variable depth
+            hill.receiveShadow = true;
             scene.add(hill);
         }
 
@@ -281,13 +292,14 @@
         let obstacles = [];
         let particles = [];
         let coins = []; 
+        let sparkles = []; // Array for new coin collect effects
 
         function buildLevel() {
             if(playerModel) {
                 playerGroup.add(playerModel.clone());
             } else {
                 const fallbackGeo = new THREE.BoxGeometry(1.5, 2.5, 1.5);
-                const fallbackMat = new THREE.MeshLambertMaterial({color: 0x00aaff});
+                const fallbackMat = new THREE.MeshStandardMaterial({color: 0x00aaff, roughness: 0.5});
                 const fallbackMesh = new THREE.Mesh(fallbackGeo, fallbackMat);
                 fallbackMesh.castShadow = true;
                 fallbackMesh.position.y = 1.25;
@@ -310,7 +322,7 @@
                     if (alienModel) {
                         mesh = alienModel.clone();
                     } else {
-                        mesh = new THREE.Mesh(new THREE.BoxGeometry(1.5, 2, 1.5), new THREE.MeshLambertMaterial({color: 0xff0055}));
+                        mesh = new THREE.Mesh(new THREE.BoxGeometry(1.5, 2, 1.5), new THREE.MeshStandardMaterial({color: 0xff0055}));
                         mesh.castShadow = true;
                         mesh.position.y = 1.0;
                     }
@@ -322,7 +334,7 @@
                     if (barrelModel) {
                         mesh = barrelModel.clone();
                     } else {
-                        mesh = new THREE.Mesh(new THREE.BoxGeometry(2, 2, 2), new THREE.MeshLambertMaterial({color: 0xff8800}));
+                        mesh = new THREE.Mesh(new THREE.BoxGeometry(2, 2, 2), new THREE.MeshStandardMaterial({color: 0xff8800}));
                         mesh.castShadow = true;
                         mesh.position.y = 1.0;
                     }
@@ -333,9 +345,15 @@
             }
         }
 
+        // Upgraded Coin Material
         const coinGeo = new THREE.CylinderGeometry(0.4, 0.4, 0.1, 16);
         coinGeo.rotateX(Math.PI / 2);
-        const coinMat = new THREE.MeshLambertMaterial({ color: 0xffdd00 });
+        const coinMat = new THREE.MeshStandardMaterial({ 
+            color: 0xffdd00, 
+            roughness: 0.2, 
+            metalness: 0.8,
+            emissive: 0x443300 // Gives it a slight glow
+        });
 
         function createLootExplosion(x, y, z) {
             for (let i = 0; i < 5; i++) {
@@ -343,15 +361,29 @@
                 coin.position.set(x, y, z);
                 coin.castShadow = true;
                 coin.velocity = new THREE.Vector3((Math.random() - 0.5) * 10, Math.random() * 15 + 10, (Math.random() - 0.5) * 5);
-                coin.life = 2.0; 
+                coin.life = 1.5 + Math.random() * 0.5; // Slightly varied lifetime
                 scene.add(coin);
                 coins.push(coin);
             }
         }
 
+        // NEW: Sparkle effect when coin is collected
+        function createSparkle(x, y, z) {
+            const geo = new THREE.BoxGeometry(0.15, 0.15, 0.15);
+            const mat = new THREE.MeshBasicMaterial({ color: 0xffffee }); // Bright white-yellow
+            for (let i = 0; i < 6; i++) {
+                const mesh = new THREE.Mesh(geo, mat);
+                mesh.position.set(x, y, z);
+                mesh.velocity = new THREE.Vector3((Math.random()-0.5)*8, Math.random()*8, (Math.random()-0.5)*8);
+                mesh.life = 0.4; 
+                scene.add(mesh);
+                sparkles.push(mesh);
+            }
+        }
+
         function createDustPoof(x, y, z) {
             const geo = new THREE.BoxGeometry(0.3, 0.3, 0.3);
-            const mat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+            const mat = new THREE.MeshStandardMaterial({ color: 0xdddddd, roughness: 1.0 });
             for (let i = 0; i < 6; i++) {
                 const mesh = new THREE.Mesh(geo, mat);
                 mesh.position.set(x + (Math.random()-0.5), y, z);
@@ -362,7 +394,6 @@
             }
         }
 
-        // --- Keyboard Controls ---
         window.addEventListener('keydown', (e) => {
             if (e.key === 'ArrowRight' || e.key === 'd') keys.right = true;
             if (e.key === 'ArrowLeft' || e.key === 'a') keys.left = true;
@@ -380,7 +411,6 @@
             if (e.key === 'ArrowLeft' || e.key === 'a') keys.left = false;
         });
 
-        // --- Mobile Touch Controls ---
         function setupTouchControls() {
             const btnLeft = document.getElementById('btnLeft');
             const btnRight = document.getElementById('btnRight');
@@ -388,7 +418,7 @@
 
             function bindTouch(element, isLeftKey, isRightKey, isJumpKey) {
                 element.addEventListener('touchstart', (e) => {
-                    e.preventDefault(); // Prevents iPad zoom/scroll
+                    e.preventDefault(); 
                     if (isLeftKey) keys.left = true;
                     if (isRightKey) keys.right = true;
                     if (isJumpKey && !isJumping && gameState === 'PLAYING') {
@@ -418,7 +448,6 @@
         
         setupTouchControls();
 
-        // --- Game Setup ---
         window.addEventListener('resize', () => {
             camera.aspect = window.innerWidth / window.innerHeight;
             camera.updateProjectionMatrix();
@@ -430,11 +459,13 @@
             obstacles.forEach(o => scene.remove(o.mesh));
             particles.forEach(p => scene.remove(p));
             coins.forEach(c => scene.remove(c));
+            sparkles.forEach(s => scene.remove(s));
             
             enemies = [];
             obstacles = [];
             particles = [];
             coins = [];
+            sparkles = [];
 
             playerGroup.position.set(0, GROUND_Y, 0);
             playerVelY = 0;
@@ -445,13 +476,17 @@
             score = 0;
             document.getElementById('scoreValue').innerText = score;
 
+            // Instantly snap camera to start
+            camera.position.x = 6;
+            dirLight.position.x = 10;
+            dirLight.target.position.x = 0;
+
             generateCourse();
 
             document.getElementById('startMenu').classList.add('hidden');
             document.getElementById('gameOverMenu').classList.add('hidden');
             document.getElementById('hud').style.display = 'block';
             
-            // Show Mobile Controls
             if ('ontouchstart' in window || navigator.maxTouchPoints > 0) {
                 document.getElementById('touchControls').style.display = 'flex';
             }
@@ -501,11 +536,10 @@
         function triggerGameOver() {
             gameState = 'GAME_OVER';
             document.getElementById('hud').style.display = 'none';
-            document.getElementById('touchControls').style.display = 'none'; // Hide touch controls
+            document.getElementById('touchControls').style.display = 'none'; 
             document.getElementById('gameOverMenu').classList.remove('hidden');
             document.getElementById('finalScore').innerText = score;
             
-            // Release movement keys in case touch was lifted after game over
             keys.left = false;
             keys.right = false;
         }
@@ -521,11 +555,13 @@
 
             if (delta > 0.1) return; 
 
+            // Handle Coins
             for (let i = coins.length - 1; i >= 0; i--) {
                 let c = coins[i];
                 c.position.addScaledVector(c.velocity, delta); 
                 c.velocity.y += GRAVITY * delta; 
                 c.rotation.y += 10 * delta; 
+                c.rotation.z += 5 * delta;
 
                 if (c.position.y <= GROUND_Y) {
                     c.position.y = GROUND_Y;
@@ -535,21 +571,40 @@
 
                 c.life -= delta; 
                 if (c.life <= 0) {
+                    createSparkle(c.position.x, c.position.y, c.position.z); // Spawn particles
                     scene.remove(c);
                     coins.splice(i, 1);
                     score += 50; 
-                    document.getElementById('scoreValue').innerText = score;
+                    
+                    // Simple UI pop effect
+                    const scoreEl = document.getElementById('scoreValue');
+                    scoreEl.innerText = score;
+                    scoreEl.style.color = '#ffdd00';
+                    setTimeout(() => scoreEl.style.color = '#ffffff', 100);
                 }
             }
 
+            // Handle Dust Particles
             for (let i = particles.length - 1; i >= 0; i--) {
                 let p = particles[i];
                 p.position.addScaledVector(p.velocity, delta); 
                 p.life -= delta; 
-                p.scale.setScalar(Math.max(0, p.life)); 
+                p.scale.setScalar(Math.max(0, p.life * 2)); // Scale based on life
                 if (p.life <= 0) {
                     scene.remove(p);
                     particles.splice(i, 1);
+                }
+            }
+
+            // Handle New Sparkle Particles
+            for (let i = sparkles.length - 1; i >= 0; i--) {
+                let s = sparkles[i];
+                s.position.addScaledVector(s.velocity, delta);
+                s.life -= delta;
+                s.scale.setScalar(Math.max(0, s.life / 0.4)); 
+                if (s.life <= 0) {
+                    scene.remove(s);
+                    sparkles.splice(i, 1);
                 }
             }
 
@@ -588,11 +643,12 @@
                     isJumping = false;
                 }
 
+                // Smooth Camera Follow (Lerp)
                 const targetCameraX = playerGroup.position.x + 6; 
-                camera.position.x += (targetCameraX - camera.position.x) * 6 * delta;
+                camera.position.x += (targetCameraX - camera.position.x) * 4 * delta;
 
-                dirLight.position.x = playerGroup.position.x + 5;
-                dirLight.target.position.x = playerGroup.position.x;
+                dirLight.position.x = camera.position.x + 4;
+                dirLight.target.position.x = camera.position.x - 6;
                 dirLight.target.updateMatrixWorld(); 
 
                 checkCollisions();
