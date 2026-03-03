@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Astro Jump!</title>
     <style>
+        /* --- CSS STYLES --- */
         body { 
             margin: 0; 
             overflow: hidden; 
@@ -93,6 +94,7 @@
         }
         .hidden { display: none !important; }
 
+        /* Mobile Touch Controls UI */
         #touchControls {
             position: absolute;
             bottom: 40px;
@@ -158,7 +160,7 @@
                 <b>Left/Right Arrows</b> to Run.<br>
                 <b>Up Arrow</b> to Jump.<br>
             </p>
-            <p>Stomp the <span class="highlight">Aliens</span> for loot!<br>Jump over the <span class="collect">Barrels</span>.</p>
+            <p>Stomp the <span class="highlight">Aliens</span> for loot!<br>Jump on <span class="collect">Platforms</span> for coins!</p>
             <button id="startBtn" style="display: none;">Launch!</button>
         </div>
 
@@ -173,6 +175,7 @@
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
     
     <script>
+        // --- 1. GAME STATE & CONSTANTS ---
         let gameState = 'LOADING'; 
         let score = 0;
         let highScore = localStorage.getItem('astroJumpHighScore') || 0;
@@ -190,6 +193,7 @@
         const PATH = 'SpaceShip%20Images/'; 
         const keys = { right: false, left: false, up: false };
 
+        // --- 2. SCENE SETUP ---
         const scene = new THREE.Scene();
         scene.background = new THREE.Color(0x0b0c10); 
         scene.fog = new THREE.Fog(0x0b0c10, 20, 70); 
@@ -206,6 +210,7 @@
         renderer.toneMapping = THREE.ACESFilmicToneMapping;
         document.body.appendChild(renderer.domElement);
 
+        // --- 3. LIGHTING & ENVIRONMENT ---
         const hemiLight = new THREE.HemisphereLight(0xffffff, 0x222233, 0.6);
         hemiLight.position.set(0, 20, 0);
         scene.add(hemiLight);
@@ -213,7 +218,6 @@
         const dirLight = new THREE.DirectionalLight(0xffffff, 1.2);
         dirLight.position.set(10, 20, 15);
         dirLight.castShadow = true; 
-        
         dirLight.shadow.mapSize.width = 1024;
         dirLight.shadow.mapSize.height = 1024;
         dirLight.shadow.camera.top = 25;
@@ -233,11 +237,13 @@
         ground.receiveShadow = true; 
         scene.add(ground);
 
+        // --- 4. ASSET LOADING ---
         const gltfLoader = new THREE.GLTFLoader();
         
         let playerModel = null;
         let alienModel = null;
         let barrelModel = null;
+        let platformModel = null;
         let backgroundProps = [];
 
         const manager = new THREE.LoadingManager();
@@ -263,7 +269,6 @@
                 if (child.isMesh) {
                     child.castShadow = true; 
                     child.receiveShadow = true;
-                    // FIX FOR THE BLACK MODELS: Force metalness to 0
                     if (child.material) {
                         child.material.metalness = 0.0;
                         child.material.roughness = 0.9;
@@ -287,7 +292,10 @@
             barrelModel = setupModel(gltf.scene, 2.5);
         });
 
-        // Load Background Scenery
+        gltfLoader.load(PATH + 'platform_long.glb', (gltf) => {
+            platformModel = setupModel(gltf.scene, 2.5);
+        });
+
         const propsToLoad = ['rocks_smallA.glb', 'crater.glb', 'satelliteDish.glb'];
         propsToLoad.forEach(file => {
             gltfLoader.load(PATH + file, (gltf) => {
@@ -296,13 +304,73 @@
             });
         });
 
+        // --- 5. GAME ENTITIES ---
         let playerGroup = new THREE.Group();
         let enemies = [];
         let obstacles = [];
+        let platforms = [];
+        let floatingCoins = [];
         let sceneryItems = [];
         let particles = [];
-        let coins = []; 
+        let lootCoins = []; 
         let sparkles = []; 
+
+        const coinGeo = new THREE.CylinderGeometry(0.4, 0.4, 0.1, 16);
+        coinGeo.rotateX(Math.PI / 2);
+        const coinMat = new THREE.MeshStandardMaterial({ color: 0xffdd00, roughness: 0.2, metalness: 0.8 });
+
+        // --- 6. LEVEL GENERATION HELPERS ---
+        function spawnEnemy(x, y) {
+            let mesh;
+            if (alienModel) {
+                mesh = alienModel.clone();
+            } else {
+                mesh = new THREE.Mesh(new THREE.BoxGeometry(1.5, 2, 1.5), new THREE.MeshStandardMaterial({color: 0xff0055}));
+                mesh.castShadow = true;
+                mesh.position.y = y;
+            }
+            mesh.position.set(x, y, 0);
+            scene.add(mesh);
+            enemies.push({ mesh: mesh, active: true });
+        }
+
+        function spawnObstacle(x, y) {
+            let mesh;
+            if (barrelModel) {
+                mesh = barrelModel.clone();
+            } else {
+                mesh = new THREE.Mesh(new THREE.BoxGeometry(2, 2, 2), new THREE.MeshStandardMaterial({color: 0xff8800}));
+                mesh.castShadow = true;
+                mesh.position.y = y;
+            }
+            mesh.position.set(x, y, 0);
+            scene.add(mesh);
+            obstacles.push({ mesh: mesh, active: true });
+        }
+
+        function spawnPlatform(x, y) {
+            let mesh;
+            if (platformModel) {
+                mesh = platformModel.clone();
+                mesh.position.set(x, y - 0.5, 0); 
+            } else {
+                mesh = new THREE.Mesh(new THREE.BoxGeometry(6, 0.5, 2), new THREE.MeshStandardMaterial({color: 0x8888aa}));
+                mesh.castShadow = true;
+                mesh.receiveShadow = true;
+                mesh.position.set(x, y - 0.25, 0);
+            }
+            scene.add(mesh);
+            platforms.push({ mesh: mesh, yFloor: y, active: true });
+        }
+
+        function spawnFloatingCoin(x, y) {
+            const mesh = new THREE.Mesh(coinGeo, coinMat);
+            mesh.position.set(x, y, 0);
+            mesh.castShadow = true;
+            mesh.rotation.x = Math.PI / 2;
+            scene.add(mesh);
+            floatingCoins.push({ mesh: mesh, active: true, baseY: y, offset: Math.random() * Math.PI * 2 });
+        }
 
         function buildLevel() {
             if(playerModel) {
@@ -326,35 +394,40 @@
             
             for(let i=0; i < 80; i++) { 
                 currentX += 12 + Math.random() * 15; 
-                const rand = Math.random();
                 
-                if (rand < 0.5) {
-                    let mesh;
-                    if (alienModel) {
-                        mesh = alienModel.clone();
+                // Ground Hazards
+                const groundRand = Math.random();
+                if (groundRand < 0.4) {
+                    spawnEnemy(currentX, GROUND_Y);
+                } else if (groundRand < 0.7) {
+                    spawnObstacle(currentX, GROUND_Y);
+                }
+
+                // Vertical Platforms
+                if (Math.random() < 0.45) { 
+                    let platY = GROUND_Y + 3.5 + (Math.random() * 2); 
+                    
+                    if (Math.random() < 0.3) {
+                        spawnPlatform(currentX - 5, platY);
+                        spawnPlatform(currentX + 5, platY + 4);
                     } else {
-                        mesh = new THREE.Mesh(new THREE.BoxGeometry(1.5, 2, 1.5), new THREE.MeshStandardMaterial({color: 0xff0055}));
-                        mesh.castShadow = true;
-                        mesh.position.y = 1.0;
+                        spawnPlatform(currentX, platY);
                     }
-                    mesh.position.set(currentX, GROUND_Y, 0);
-                    scene.add(mesh);
-                    enemies.push({ mesh: mesh, active: true });
-                } else {
-                    let mesh;
-                    if (barrelModel) {
-                        mesh = barrelModel.clone();
+
+                    const topRand = Math.random();
+                    if (topRand < 0.3) {
+                        spawnEnemy(currentX, platY);
+                    } else if (topRand < 0.5) {
+                        spawnObstacle(currentX, platY); 
                     } else {
-                        mesh = new THREE.Mesh(new THREE.BoxGeometry(2, 2, 2), new THREE.MeshStandardMaterial({color: 0xff8800}));
-                        mesh.castShadow = true;
-                        mesh.position.y = 1.0;
+                        spawnFloatingCoin(currentX - 2.5, platY + 1.2);
+                        spawnFloatingCoin(currentX, platY + 1.8);
+                        spawnFloatingCoin(currentX + 2.5, platY + 1.2);
                     }
-                    mesh.position.set(currentX, GROUND_Y, 0);
-                    scene.add(mesh);
-                    obstacles.push({ mesh: mesh, active: true });
                 }
             }
 
+            // Scenery
             if (backgroundProps.length > 0) {
                 for(let i=0; i < 40; i++) {
                     const randomPropIndex = Math.floor(Math.random() * backgroundProps.length);
@@ -371,10 +444,7 @@
             }
         }
 
-        const coinGeo = new THREE.CylinderGeometry(0.4, 0.4, 0.1, 16);
-        coinGeo.rotateX(Math.PI / 2);
-        const coinMat = new THREE.MeshStandardMaterial({ color: 0xffdd00, roughness: 0.2, metalness: 0.8 });
-
+        // --- 7. PARTICLE EFFECTS ---
         function createLootExplosion(x, y, z) {
             for (let i = 0; i < 5; i++) {
                 const coin = new THREE.Mesh(coinGeo, coinMat);
@@ -383,7 +453,7 @@
                 coin.velocity = new THREE.Vector3((Math.random() - 0.5) * 10, Math.random() * 15 + 10, (Math.random() - 0.5) * 5);
                 coin.life = 1.5 + Math.random() * 0.5; 
                 scene.add(coin);
-                coins.push(coin);
+                lootCoins.push(coin);
             }
         }
 
@@ -413,6 +483,7 @@
             }
         }
 
+        // --- 8. INPUT CONTROLS ---
         window.addEventListener('keydown', (e) => {
             if (e.key === 'ArrowRight' || e.key === 'd') keys.right = true;
             if (e.key === 'ArrowLeft' || e.key === 'a') keys.left = true;
@@ -420,7 +491,7 @@
                 if (!isJumping && gameState === 'PLAYING') {
                     playerVelY = JUMP_FORCE;
                     isJumping = true;
-                    createDustPoof(playerGroup.position.x, GROUND_Y, playerGroup.position.z);
+                    createDustPoof(playerGroup.position.x, playerGroup.position.y, playerGroup.position.z);
                 }
             }
         });
@@ -443,7 +514,7 @@
                     if (isJumpKey && !isJumping && gameState === 'PLAYING') {
                         playerVelY = JUMP_FORCE;
                         isJumping = true;
-                        createDustPoof(playerGroup.position.x, GROUND_Y, playerGroup.position.z);
+                        createDustPoof(playerGroup.position.x, playerGroup.position.y, playerGroup.position.z);
                     }
                 }, { passive: false });
 
@@ -473,19 +544,24 @@
             renderer.setSize(window.innerWidth, window.innerHeight);
         });
 
+        // --- 9. GAME LOGIC & COLLISION ---
         function resetGame() {
             enemies.forEach(e => scene.remove(e.mesh));
             obstacles.forEach(o => scene.remove(o.mesh));
+            platforms.forEach(p => scene.remove(p.mesh));
+            floatingCoins.forEach(fc => scene.remove(fc.mesh));
             sceneryItems.forEach(s => scene.remove(s));
             particles.forEach(p => scene.remove(p));
-            coins.forEach(c => scene.remove(c));
+            lootCoins.forEach(c => scene.remove(c));
             sparkles.forEach(s => scene.remove(s));
             
             enemies = [];
             obstacles = [];
+            platforms = [];
+            floatingCoins = [];
             sceneryItems = [];
             particles = [];
-            coins = [];
+            lootCoins = [];
             sparkles = [];
 
             playerGroup.position.set(0, GROUND_Y, 0);
@@ -495,7 +571,7 @@
             keys.left = false;
             
             score = 0;
-            document.getElementById('scoreValue').innerText = score;
+            updateScoreUI();
 
             camera.position.x = 6;
             dirLight.position.x = 10;
@@ -514,52 +590,63 @@
             gameState = 'PLAYING';
         }
 
-        // --- NEW PRECISE HITBOX LOGIC ---
+        function updateScoreUI() {
+            const scoreEl = document.getElementById('scoreValue');
+            scoreEl.innerText = score;
+            scoreEl.style.color = '#ffdd00';
+            setTimeout(() => scoreEl.style.color = '#ffffff', 100);
+        }
+
         function checkCollisions() {
             const pX = playerGroup.position.x;
             const pY = playerGroup.position.y;
 
+            // Enemy Collision
             for (let i = 0; i < enemies.length; i++) {
                 if (!enemies[i].active) continue;
-                
                 const eX = enemies[i].mesh.position.x;
                 const eY = enemies[i].mesh.position.y;
                 
-                // Use absolute distances for X and Y to create a precise rectangle hitbox
                 const distX = Math.abs(pX - eX);
-                const distY = pY - eY; // Positive means player is above
+                const distY = pY - eY; 
 
-                // If within the general area of the alien
                 if (distX < 1.2 && Math.abs(distY) < 2.5) { 
-                    // Stomp! Player must be falling AND safely above the alien's center
-                    if (playerVelY < 0 && distY > 0.5) {
+                    if (playerVelY < 0 && distY > 0.5) { 
                         enemies[i].active = false;
                         scene.remove(enemies[i].mesh);
                         createLootExplosion(eX, eY + 1, 0);
-                        playerVelY = JUMP_FORCE * 0.7; // Bounce
+                        playerVelY = JUMP_FORCE * 0.7; 
                         isJumping = true;
-                    } 
-                    // Tighter death hitbox: Only dies if you are truly colliding horizontally and vertically
-                    else if (distX < 0.8 && distY < 1.0 && distY > -1.5) { 
+                    } else if (distX < 0.8 && distY < 1.0 && distY > -1.5) { 
                         triggerGameOver();
                         return;
                     }
                 }
             }
 
+            // Obstacle Collision
             for (let i = 0; i < obstacles.length; i++) {
                 if (!obstacles[i].active) continue;
-                
                 const oX = obstacles[i].mesh.position.x;
                 const oY = obstacles[i].mesh.position.y;
                 
-                const distX = Math.abs(pX - oX);
-                const distY = Math.abs(pY - oY);
-
-                // Tighter barrel hitbox so player can actually jump cleanly over it
-                if (distX < 0.8 && distY < 1.0) {
+                if (Math.abs(pX - oX) < 0.8 && Math.abs(pY - oY) < 1.0) {
                     triggerGameOver();
                     return;
+                }
+            }
+
+            // Floating Coin Collection
+            for (let i = 0; i < floatingCoins.length; i++) {
+                let fc = floatingCoins[i];
+                if (!fc.active) continue;
+
+                if (Math.abs(pX - fc.mesh.position.x) < 1.2 && Math.abs(pY + 1.0 - fc.mesh.position.y) < 1.5) {
+                    fc.active = false;
+                    scene.remove(fc.mesh);
+                    createSparkle(fc.mesh.position.x, fc.mesh.position.y, 0);
+                    score += 25; 
+                    updateScoreUI();
                 }
             }
         }
@@ -581,34 +668,38 @@
             keys.right = false;
         }
 
-        document.getElementById('startBtn').addEventListener('click', resetGame);
-        document.getElementById('restartBtn').addEventListener('click', resetGame);
-
+        // --- 10. MAIN ANIMATION LOOP ---
         const clock = new THREE.Clock();
 
         function animate() {
             requestAnimationFrame(animate);
             const rawDelta = clock.getDelta();
 
-            if (rawDelta > 0.1) return; // Prevent teleporting on lag
+            if (rawDelta > 0.1) return; 
 
-            // --- PROGRESSIVE SPEED LOGIC ---
-            // Speed increases by 10% for every 150 points, capped at a maximum of 2.5x speed
             let speedMultiplier = 1.0 + (score / 1500);
             speedMultiplier = Math.min(speedMultiplier, 2.5); 
-            
-            // gameDelta applies the speedup to everything physics-related
             const gameDelta = rawDelta * speedMultiplier;
 
-            for (let i = coins.length - 1; i >= 0; i--) {
-                let c = coins[i];
+            // Handle Floating Coins
+            for (let i = 0; i < floatingCoins.length; i++) {
+                let fc = floatingCoins[i];
+                if (!fc.active) continue;
+                fc.mesh.rotation.z += 2 * gameDelta;
+                fc.mesh.position.y = fc.baseY + Math.sin(Date.now() * 0.003 + fc.offset) * 0.3; 
+            }
+
+            // Handle Loot Coins
+            for (let i = lootCoins.length - 1; i >= 0; i--) {
+                let c = lootCoins[i];
                 c.position.addScaledVector(c.velocity, gameDelta); 
                 c.velocity.y += GRAVITY * gameDelta; 
                 c.rotation.y += 10 * gameDelta; 
                 c.rotation.z += 5 * gameDelta;
 
-                if (c.position.y <= GROUND_Y) {
-                    c.position.y = GROUND_Y;
+                let floorLevel = GROUND_Y;
+                if (c.position.y <= floorLevel) {
+                    c.position.y = floorLevel;
                     c.velocity.y *= -0.5; 
                     c.velocity.x *= 0.8; 
                 }
@@ -617,16 +708,13 @@
                 if (c.life <= 0) {
                     createSparkle(c.position.x, c.position.y, c.position.z); 
                     scene.remove(c);
-                    coins.splice(i, 1);
+                    lootCoins.splice(i, 1);
                     score += 50; 
-                    
-                    const scoreEl = document.getElementById('scoreValue');
-                    scoreEl.innerText = score;
-                    scoreEl.style.color = '#ffdd00';
-                    setTimeout(() => scoreEl.style.color = '#ffffff', 100);
+                    updateScoreUI();
                 }
             }
 
+            // Handle Particles
             for (let i = particles.length - 1; i >= 0; i--) {
                 let p = particles[i];
                 p.position.addScaledVector(p.velocity, gameDelta); 
@@ -638,6 +726,7 @@
                 }
             }
 
+            // Handle Sparkles
             for (let i = sparkles.length - 1; i >= 0; i--) {
                 let s = sparkles[i];
                 s.position.addScaledVector(s.velocity, gameDelta);
@@ -650,6 +739,7 @@
             }
 
             if (gameState === 'PLAYING') {
+                // Movement
                 if (keys.right) {
                     playerVelX = MOVE_SPEED;
                     if(playerModel) {
@@ -671,22 +761,44 @@
                     if(playerModel) playerModel.rotation.z = 0; 
                 }
 
+                // Platform Floor Detection
+                let targetFloor = GROUND_Y;
+                for (let i = 0; i < platforms.length; i++) {
+                    if (!platforms[i].active) continue;
+                    let platX = platforms[i].mesh.position.x;
+                    let platY = platforms[i].yFloor;
+                    
+                    if (playerGroup.position.x > platX - 3.2 && playerGroup.position.x < platX + 3.2) {
+                        if (playerGroup.position.y >= platY - 0.5 && playerVelY <= 0) {
+                            targetFloor = Math.max(targetFloor, platY);
+                        }
+                    }
+                }
+
                 playerGroup.position.x += playerVelX * gameDelta;
                 playerVelY += GRAVITY * gameDelta;
                 playerGroup.position.y += playerVelY * gameDelta;
 
-                if (playerGroup.position.y <= GROUND_Y) {
+                // Grounding Logic
+                if (playerGroup.position.y <= targetFloor) {
                     if (isJumping && playerVelY < -10) {
-                        createDustPoof(playerGroup.position.x, GROUND_Y, playerGroup.position.z); 
+                        createDustPoof(playerGroup.position.x, targetFloor, playerGroup.position.z); 
                     }
-                    playerGroup.position.y = GROUND_Y;
+                    playerGroup.position.y = targetFloor;
                     playerVelY = 0;
                     isJumping = false;
+                } else if (playerGroup.position.y > targetFloor && playerVelY === 0) {
+                    playerVelY = -0.1; 
                 }
 
+                // Camera Update
                 const targetCameraX = playerGroup.position.x + 6; 
                 camera.position.x += (targetCameraX - camera.position.x) * 4 * rawDelta;
+                
+                const targetCameraY = Math.max(6, playerGroup.position.y + 3);
+                camera.position.y += (targetCameraY - camera.position.y) * 4 * rawDelta;
 
+                // Light Update
                 dirLight.position.x = camera.position.x + 4;
                 dirLight.target.position.x = camera.position.x - 6;
                 dirLight.target.updateMatrixWorld(); 
