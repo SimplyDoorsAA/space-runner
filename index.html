@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Astro Jump!</title>
     <style>
         body { 
@@ -11,6 +11,9 @@
             background-color: #6185f8; 
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
             user-select: none;
+            -webkit-user-select: none;
+            -webkit-touch-callout: none;
+            touch-action: none; /* Prevents default browser gestures on iPad */
         }
         #uiLayer { 
             position: absolute; 
@@ -18,6 +21,7 @@
             pointer-events: none; 
             display: flex; flex-direction: column; 
             justify-content: center; align-items: center; 
+            z-index: 5;
         }
         #hud {
             position: absolute;
@@ -28,6 +32,7 @@
             font-weight: 900;
             text-shadow: 3px 3px 0 #000;
             display: none;
+            z-index: 5;
         }
         .menu { 
             background: rgba(255, 255, 255, 0.95); 
@@ -81,11 +86,61 @@
             100% { opacity: 1; }
         }
         .hidden { display: none !important; }
+
+        /* Mobile Touch Controls UI */
+        #touchControls {
+            position: absolute;
+            bottom: 40px;
+            left: 0;
+            width: 100%;
+            display: none; 
+            justify-content: space-between;
+            padding: 0 40px;
+            box-sizing: border-box;
+            pointer-events: none; 
+            z-index: 10;
+        }
+        .touch-group {
+            display: flex;
+            gap: 20px;
+        }
+        .touch-btn {
+            background: rgba(255, 255, 255, 0.4);
+            border: 4px solid rgba(51, 51, 51, 0.6);
+            border-radius: 50%;
+            width: 80px;
+            height: 80px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 36px;
+            font-weight: bold;
+            color: rgba(51, 51, 51, 0.8);
+            pointer-events: auto; 
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        .touch-btn:active {
+            background: rgba(255, 255, 255, 0.9);
+            border-color: #333;
+            color: #333;
+            transform: scale(0.95);
+        }
     </style>
 </head>
 <body>
 
     <div id="hud">SCORE: <span id="scoreValue">0</span></div>
+
+    <div id="touchControls">
+        <div class="touch-group">
+            <div id="btnLeft" class="touch-btn">◀</div>
+            <div id="btnRight" class="touch-btn">▶</div>
+        </div>
+        <div class="touch-group">
+            <div id="btnJump" class="touch-btn">▲</div>
+        </div>
+    </div>
 
     <div id="uiLayer">
         <div id="startMenu" class="menu">
@@ -110,7 +165,6 @@
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
     
     <script>
-        // --- GAME STATE & CONSTANTS ---
         let gameState = 'LOADING'; 
         let score = 0;
         
@@ -123,11 +177,10 @@
         let playerVelX = 0;
         let isJumping = false;
 
-        // OPTIMIZATION: Removed the %20, browser handles literal spaces better natively.
-        const PATH = 'SpaceShip Images/'; 
+        // URL encoded space to ensure GitHub Pages fetches correctly
+        const PATH = 'SpaceShip%20Images/'; 
         const keys = { right: false, left: false, up: false };
 
-        // --- SCENE SETUP ---
         const scene = new THREE.Scene();
         scene.background = new THREE.Color(0x6185f8); 
         scene.fog = new THREE.Fog(0x6185f8, 20, 70);
@@ -142,7 +195,6 @@
         renderer.shadowMap.type = THREE.PCFSoftShadowMap;
         document.body.appendChild(renderer.domElement);
 
-        // --- LIGHTING ---
         const ambientLight = new THREE.AmbientLight(0xffffff, 0.7); 
         scene.add(ambientLight);
         
@@ -150,11 +202,8 @@
         dirLight.position.set(5, 20, 15);
         dirLight.castShadow = true; 
         
-        // OPTIMIZATION: Increased shadow resolution for crisp shadows
         dirLight.shadow.mapSize.width = 1024;
         dirLight.shadow.mapSize.height = 1024;
-        
-        // Ensure the light reaches far enough to cast shadows
         dirLight.shadow.camera.top = 20;
         dirLight.shadow.camera.bottom = -20;
         dirLight.shadow.camera.left = -20;
@@ -163,10 +212,8 @@
         dirLight.shadow.camera.far = 50;
 
         scene.add(dirLight);
-        // CRITICAL BUG FIX: The target must be added to the scene for the light to track it!
         scene.add(dirLight.target); 
 
-        // --- ENVIRONMENT ---
         const groundGeo = new THREE.BoxGeometry(2000, 10, 10);
         const groundMat = new THREE.MeshLambertMaterial({ color: 0x55cc55 }); 
         const ground = new THREE.Mesh(groundGeo, groundMat);
@@ -182,7 +229,6 @@
             scene.add(hill);
         }
 
-        // --- ASSET MANAGEMENT ---
         const gltfLoader = new THREE.GLTFLoader();
         let playerModel = null;
         let alienModel = null;
@@ -198,7 +244,6 @@
         manager.onError = function (url) {
             console.error('Error loading:', url);
             document.getElementById('loadingText').innerText = "Asset Error. Using Fallbacks.";
-            // If it fails, start anyway with fallback blocks
             document.getElementById('startBtn').style.display = 'block';
             gameState = 'MENU';
             buildLevel(); 
@@ -217,7 +262,6 @@
             return model;
         }
 
-        // Load Models
         gltfLoader.load(PATH + 'astronautA.glb', (gltf) => {
             playerModel = setupModel(gltf.scene, 2.5);
             playerModel.rotation.y = Math.PI / 2; 
@@ -232,7 +276,6 @@
             barrelModel = setupModel(gltf.scene, 2.5);
         });
 
-        // --- GAME ENTITIES ---
         let playerGroup = new THREE.Group();
         let enemies = [];
         let obstacles = [];
@@ -240,7 +283,6 @@
         let coins = []; 
 
         function buildLevel() {
-            // SAFETY FALLBACK: If GitHub fails to load the model, make a blue box
             if(playerModel) {
                 playerGroup.add(playerModel.clone());
             } else {
@@ -268,7 +310,6 @@
                     if (alienModel) {
                         mesh = alienModel.clone();
                     } else {
-                        // Fallback Red Box
                         mesh = new THREE.Mesh(new THREE.BoxGeometry(1.5, 2, 1.5), new THREE.MeshLambertMaterial({color: 0xff0055}));
                         mesh.castShadow = true;
                         mesh.position.y = 1.0;
@@ -281,7 +322,6 @@
                     if (barrelModel) {
                         mesh = barrelModel.clone();
                     } else {
-                        // Fallback Orange Box
                         mesh = new THREE.Mesh(new THREE.BoxGeometry(2, 2, 2), new THREE.MeshLambertMaterial({color: 0xff8800}));
                         mesh.castShadow = true;
                         mesh.position.y = 1.0;
@@ -293,7 +333,6 @@
             }
         }
 
-        // --- EFFECTS ---
         const coinGeo = new THREE.CylinderGeometry(0.4, 0.4, 0.1, 16);
         coinGeo.rotateX(Math.PI / 2);
         const coinMat = new THREE.MeshLambertMaterial({ color: 0xffdd00 });
@@ -323,7 +362,7 @@
             }
         }
 
-        // --- INPUT HANDLING ---
+        // --- Keyboard Controls ---
         window.addEventListener('keydown', (e) => {
             if (e.key === 'ArrowRight' || e.key === 'd') keys.right = true;
             if (e.key === 'ArrowLeft' || e.key === 'a') keys.left = true;
@@ -341,13 +380,51 @@
             if (e.key === 'ArrowLeft' || e.key === 'a') keys.left = false;
         });
 
+        // --- Mobile Touch Controls ---
+        function setupTouchControls() {
+            const btnLeft = document.getElementById('btnLeft');
+            const btnRight = document.getElementById('btnRight');
+            const btnJump = document.getElementById('btnJump');
+
+            function bindTouch(element, isLeftKey, isRightKey, isJumpKey) {
+                element.addEventListener('touchstart', (e) => {
+                    e.preventDefault(); // Prevents iPad zoom/scroll
+                    if (isLeftKey) keys.left = true;
+                    if (isRightKey) keys.right = true;
+                    if (isJumpKey && !isJumping && gameState === 'PLAYING') {
+                        playerVelY = JUMP_FORCE;
+                        isJumping = true;
+                        createDustPoof(playerGroup.position.x, GROUND_Y, playerGroup.position.z);
+                    }
+                }, { passive: false });
+
+                element.addEventListener('touchend', (e) => {
+                    e.preventDefault();
+                    if (isLeftKey) keys.left = false;
+                    if (isRightKey) keys.right = false;
+                }, { passive: false });
+
+                element.addEventListener('touchcancel', (e) => {
+                    e.preventDefault();
+                    if (isLeftKey) keys.left = false;
+                    if (isRightKey) keys.right = false;
+                }, { passive: false });
+            }
+
+            bindTouch(btnLeft, true, false, false);
+            bindTouch(btnRight, false, true, false);
+            bindTouch(btnJump, false, false, true);
+        }
+        
+        setupTouchControls();
+
+        // --- Game Setup ---
         window.addEventListener('resize', () => {
             camera.aspect = window.innerWidth / window.innerHeight;
             camera.updateProjectionMatrix();
             renderer.setSize(window.innerWidth, window.innerHeight);
         });
 
-        // --- GAME LOGIC ---
         function resetGame() {
             enemies.forEach(e => scene.remove(e.mesh));
             obstacles.forEach(o => scene.remove(o.mesh));
@@ -373,41 +450,40 @@
             document.getElementById('startMenu').classList.add('hidden');
             document.getElementById('gameOverMenu').classList.add('hidden');
             document.getElementById('hud').style.display = 'block';
+            
+            // Show Mobile Controls
+            if ('ontouchstart' in window || navigator.maxTouchPoints > 0) {
+                document.getElementById('touchControls').style.display = 'flex';
+            }
 
             gameState = 'PLAYING';
         }
 
         function checkCollisions() {
-            // OPTIMIZATION: Switched to Distance-based checking instead of heavy Bounding Boxes
             const pX = playerGroup.position.x;
             const pY = playerGroup.position.y;
 
-            // Check Aliens
             for (let i = 0; i < enemies.length; i++) {
                 if (!enemies[i].active) continue;
                 
                 const eX = enemies[i].mesh.position.x;
                 const eY = enemies[i].mesh.position.y;
-                
-                // Fast distance check (Pythagorean theorem basically)
                 const dist = Math.sqrt((pX - eX)**2 + (pY - eY)**2);
 
-                if (dist < 2.0) { // Collision radius
+                if (dist < 2.0) { 
                     if (playerVelY < 0 && pY > eY + 0.8) {
-                        // Stomp!
                         enemies[i].active = false;
                         scene.remove(enemies[i].mesh);
                         createLootExplosion(eX, eY + 1, 0);
                         playerVelY = JUMP_FORCE * 0.7; 
                         isJumping = true;
-                    } else if (dist < 1.5) { // Tighter tolerance for side hits
+                    } else if (dist < 1.5) { 
                         triggerGameOver();
                         return;
                     }
                 }
             }
 
-            // Check Barrels
             for (let i = 0; i < obstacles.length; i++) {
                 if (!obstacles[i].active) continue;
                 
@@ -425,14 +501,18 @@
         function triggerGameOver() {
             gameState = 'GAME_OVER';
             document.getElementById('hud').style.display = 'none';
+            document.getElementById('touchControls').style.display = 'none'; // Hide touch controls
             document.getElementById('gameOverMenu').classList.remove('hidden');
             document.getElementById('finalScore').innerText = score;
+            
+            // Release movement keys in case touch was lifted after game over
+            keys.left = false;
+            keys.right = false;
         }
 
         document.getElementById('startBtn').addEventListener('click', resetGame);
         document.getElementById('restartBtn').addEventListener('click', resetGame);
 
-        // --- MAIN UPDATE LOOP ---
         const clock = new THREE.Clock();
 
         function animate() {
@@ -441,7 +521,6 @@
 
             if (delta > 0.1) return; 
 
-            // Animate Loot Coins
             for (let i = coins.length - 1; i >= 0; i--) {
                 let c = coins[i];
                 c.position.addScaledVector(c.velocity, delta); 
@@ -463,7 +542,6 @@
                 }
             }
 
-            // Animate Particles
             for (let i = particles.length - 1; i >= 0; i--) {
                 let p = particles[i];
                 p.position.addScaledVector(p.velocity, delta); 
@@ -513,10 +591,9 @@
                 const targetCameraX = playerGroup.position.x + 6; 
                 camera.position.x += (targetCameraX - camera.position.x) * 6 * delta;
 
-                // BUG FIX: Dynamic Light Tracking so shadows never disappear!
                 dirLight.position.x = playerGroup.position.x + 5;
                 dirLight.target.position.x = playerGroup.position.x;
-                dirLight.target.updateMatrixWorld(); // Forces the light to aim properly
+                dirLight.target.updateMatrixWorld(); 
 
                 checkCollisions();
             }
