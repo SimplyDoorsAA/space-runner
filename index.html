@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Space Runner</title>
+    <style>
+        body { 
+            margin: 0; 
+            overflow: hidden; 
+            background-color: #050510; 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            user-select: none;
+        }
+        #uiLayer { 
+            position: absolute; 
+            top: 0; left: 0; width: 100%; height: 100%; 
+            pointer-events: none; 
+            display: flex; flex-direction: column; 
+            justify-content: center; align-items: center; 
+        }
+        #hud {
+            position: absolute;
+            top: 20px;
+            left: 30px;
+            color: #00ffff;
+            font-size: 28px;
+            font-weight: 900;
+            text-shadow: 0 0 10px #00ffff;
+            display: none;
+        }
+        .menu { 
+            background: rgba(10, 10, 30, 0.85); 
+            padding: 50px; 
+            border-radius: 15px; 
+            border: 2px solid #00ffff;
+            text-align: center; 
+            color: white; 
+            pointer-events: auto; 
+            box-shadow: 0 0 30px rgba(0, 255, 255, 0.2);
+        }
+        h1 { margin-top: 0; color: #00ffff; font-size: 48px; text-transform: uppercase; letter-spacing: 2px; }
+        p { font-size: 18px; color: #aaa; line-height: 1.6; }
+        .highlight { color: #ff0055; font-weight: bold; }
+        .collect { color: #00ffaa; font-weight: bold; }
+        button { 
+            background: #00ffff; 
+            color: #000; 
+            border: none; 
+            padding: 15px 40px; 
+            font-size: 20px; 
+            border-radius: 8px; 
+            cursor: pointer; 
+            text-transform: uppercase; 
+            font-weight: 900; 
+            margin-top: 20px;
+            transition: all 0.2s;
+        }
+        button:hover { background: #fff; box-shadow: 0 0 20px #00ffff; transform: scale(1.05); }
+        .hidden { display: none !important; }
+    </style>
+</head>
+<body>
+
+    <div id="hud">SCORE: <span id="scoreValue">0</span></div>
+
+    <div id="uiLayer">
+        <div id="startMenu" class="menu">
+            <h1>Space Runner</h1>
+            <p>
+                <b>Left/Right Arrows</b> to switch lanes.<br>
+                <b>Up Arrow</b> to Jump.<br>
+                <b>Spacebar</b> to Shoot!
+            </p>
+            <p>Dodge the <span class="highlight">Spiky Aliens</span>!<br>Collect <span class="collect">Green Rings</span> for points.</p>
+            <button id="startBtn">Play Now</button>
+        </div>
+
+        <div id="gameOverMenu" class="menu hidden">
+            <h1 style="color: #ff0055;">MISSION FAILED</h1>
+            <p>Final Score: <span id="finalScore" style="color: #fff; font-size: 24px; font-weight: bold;">0</span></p>
+            <button id="restartBtn">Reboot Mission</button>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    
+    <script>
+        // --- GAME STATE & CONSTANTS ---
+        let gameState = 'MENU'; 
+        const LANE_X = [-4, 0, 4]; 
+        let currentLane = 1; 
+        let score = 0;
+        let gameSpeed = 40;
+        let speedMultiplier = 1;
+
+        // --- SCENE SETUP ---
+        const scene = new THREE.Scene();
+        scene.fog = new THREE.FogExp2(0x050510, 0.015); 
+
+        const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 200);
+        camera.position.set(0, 6, 14);
+        camera.lookAt(0, 0, -20);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.body.appendChild(renderer.domElement);
+
+        // --- LIGHTING ---
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+        scene.add(ambientLight);
+        const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        dirLight.position.set(10, 20, 10);
+        scene.add(dirLight);
+
+        // --- ENVIRONMENT ---
+        const gridHelper = new THREE.GridHelper(200, 100, 0x00ffff, 0x003333);
+        gridHelper.position.y = -0.5;
+        scene.add(gridHelper);
+
+        // --- TEXTURE LOADING ---
+        const textureLoader = new THREE.TextureLoader();
+        // Load the astronaut image you just saved!
+        const astronautTexture = textureLoader.load('image_4.png');
+
+        // --- 3D ENTITY BUILDERS ---
+        
+        // 1. Build Player (Cute Astronaut Sprite)
+        const playerGeo = new THREE.PlaneGeometry(3.5, 3.5);
+        const playerMat = new THREE.MeshBasicMaterial({ map: astronautTexture, transparent: true, side: THREE.DoubleSide });
+        const playerGroup = new THREE.Mesh(playerGeo, playerMat);
+        playerGroup.position.set(LANE_X[currentLane], 1.5, 0);
+        scene.add(playerGroup);
+
+        // Player Physics
+        let playerVelocityY = 0;
+        let isJumping = false;
+        const GRAVITY = -60;
+        const JUMP_FORCE = 25;
+
+        // Player Tail/Followers (Mini Astronauts)
+        const tailCount = 3;
+        const tails = [];
+        const playerHistory = []; 
+
+        for(let i=0; i<tailCount; i++) {
+            const miniAstro = playerGroup.clone();
+            miniAstro.scale.set(0.5, 0.5, 0.5); 
+            miniAstro.position.set(playerGroup.position.x, playerGroup.position.y, playerGroup.position.z + (i+1)*2);
+            scene.add(miniAstro);
+            tails.push(miniAstro);
+        }
+
+        // Object Pools & Geometries (Using pure 3D for these until we generate more images)
+        let enemies = [];
+        let collectibles = [];
+        let projectiles = [];
+
+        // Enemy: Spiky Red Alien 
+        const enemyGeo = new THREE.IcosahedronGeometry(1.2, 0); 
+        const enemyMat = new THREE.MeshLambertMaterial({ color: 0xff0055, emissive: 0x550011 });
+        
+        // Collectible: Glowing Green Ring
+        const collectGeo = new THREE.TorusGeometry(0.8, 0.3, 16, 32);
+        const collectMat = new THREE.MeshLambertMaterial({ color: 0x00ffaa, emissive: 0x005533 });
+
+        // Projectile: Yellow Laser
+        const projectileGeo = new THREE.CylinderGeometry(0.2, 0.2, 2, 8);
+        const projectileMat = new THREE.MeshLambertMaterial({ color: 0xffff00, emissive: 0xaaaa00 });
+
+
+        // --- INPUT HANDLING ---
+        window.addEventListener('keydown', (e) => {
+            if (gameState !== 'PLAYING') return;
+
+            if ((e.key === 'ArrowLeft' || e.key === 'a') && currentLane > 0) {
+                currentLane--;
+            } else if ((e.key === 'ArrowRight' || e.key === 'd') && currentLane < 2) {
+                currentLane++;
+            } else if ((e.key === 'ArrowUp' || e.key === 'w') && !isJumping) {
+                isJumping = true;
+                playerVelocityY = JUMP_FORCE;
+            } else if (e.key === ' ') {
+                spawnProjectile();
+            }
+        });
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        // --- GAME LOGIC FUNCTIONS ---
+        function spawnProjectile() {
+            const mesh = new THREE.Mesh(projectileGeo, projectileMat);
+            mesh.position.set(playerGroup.position.x, playerGroup.position.y, playerGroup.position.z - 1);
+            mesh.rotation.x = Math.PI / 2; 
+            scene.add(mesh);
+            projectiles.push(mesh);
+        }
+
+        function spawnObject(type) {
+            const laneIndex = Math.floor(Math.random() * 3);
+            const xPos = LANE_X[laneIndex];
+            const zPos = -150; 
+
+            if (type === 'ENEMY') {
+                const mesh = new THREE.Mesh(enemyGeo, enemyMat);
+                mesh.position.set(xPos, 1.5, zPos);
+                scene.add(mesh);
+                enemies.push(mesh);
+            } else if (type === 'COLLECTIBLE') {
+                const mesh = new THREE.Mesh(collectGeo, collectMat);
+                mesh.position.set(xPos, 1.5, zPos);
+                scene.add(mesh);
+                collectibles.push(mesh);
+            }
+        }
+
+        function resetGame() {
+            enemies.forEach(e => scene.remove(e));
+            collectibles.forEach(c => scene.remove(c));
+            projectiles.forEach(p => scene.remove(p));
+            enemies = [];
+            collectibles = [];
+            projectiles = [];
+            playerHistory.length = 0;
+
+            currentLane = 1;
+            playerGroup.position.set(LANE_X[currentLane], 1.5, 0);
+            playerVelocityY = 0;
+            isJumping = false;
+            score = 0;
+            speedMultiplier = 1;
+            document.getElementById('scoreValue').innerText = score;
+
+            tails.forEach((t, i) => {
+                t.position.set(playerGroup.position.x, playerGroup.position.y, (i+1)*2.5);
+            });
+
+            document.getElementById('startMenu').classList.add('hidden');
+            document.getElementById('gameOverMenu').classList.add('hidden');
+            document.getElementById('hud').style.display = 'block';
+
+            gameState = 'PLAYING';
+        }
+
+        function checkCollisions() {
+            const playerBox = new THREE.Box3().setFromObject(playerGroup);
+            playerBox.expandByScalar(-0.4); 
+
+            for (let i = enemies.length - 1; i >= 0; i--) {
+                const enemyBox = new THREE.Box3().setFromObject(enemies[i]);
+                enemyBox.expandByScalar(-0.2); 
+
+                if (playerBox.intersectsBox(enemyBox)) {
+                    triggerGameOver();
+                    return;
+                }
+                
+                for (let j = projectiles.length - 1; j >= 0; j--) {
+                    const projectileBox = new THREE.Box3().setFromObject(projectiles[j]);
+                    if (projectileBox.intersectsBox(enemyBox)) {
+                        score += 50;
+                        document.getElementById('scoreValue').innerText = score;
+                        
+                        scene.remove(enemies[i]);
+                        enemies.splice(i, 1);
+                        scene.remove(projectiles[j]);
+                        projectiles.splice(j, 1);
+                        break; 
+                    }
+                }
+            }
+
+            for (let i = collectibles.length - 1; i >= 0; i--) {
+                const collectBox = new THREE.Box3().setFromObject(collectibles[i]);
+                if (playerBox.intersectsBox(collectBox)) {
+                    score += 100;
+                    document.getElementById('scoreValue').innerText = score;
+                    scene.remove(collectibles[i]);
+                    collectibles.splice(i, 1);
+                }
+            }
+        }
+
+        function triggerGameOver() {
+            gameState = 'GAME_OVER';
+            document.getElementById('hud').style.display = 'none';
+            document.getElementById('gameOverMenu').classList.remove('hidden');
+            document.getElementById('finalScore').innerText = score;
+        }
+
+        document.getElementById('startBtn').addEventListener('click', resetGame);
+        document.getElementById('restartBtn').addEventListener('click', resetGame);
+
+        const clock = new THREE.Clock();
+
+        function animate() {
+            requestAnimationFrame(animate);
+            const delta = clock.getDelta();
+
+            if (delta > 0.1) return; 
+
+            if (gameState === 'PLAYING') {
+                const targetX = LANE_X[currentLane];
+                playerGroup.position.x += (targetX - playerGroup.position.x) * 15 * delta;
+
+                if (isJumping) {
+                    playerGroup.position.y += playerVelocityY * delta;
+                    playerVelocityY += GRAVITY * delta;
+
+                    if (playerGroup.position.y <= 1.5) {
+                        playerGroup.position.y = 1.5;
+                        isJumping = false;
+                        playerVelocityY = 0;
+                    }
+                }
+
+                playerHistory.unshift({ x: playerGroup.position.x, y: playerGroup.position.y });
+                if (playerHistory.length > 50) playerHistory.pop(); 
+
+                tails.forEach((tail, index) => {
+                    const historyIndex = (index + 1) * 6; 
+                    if (playerHistory[historyIndex]) {
+                        tail.position.x = playerHistory[historyIndex].x;
+                        tail.position.y = playerHistory[historyIndex].y;
+                    }
+                });
+
+                const currentSpeed = gameSpeed * speedMultiplier;
+                
+                gridHelper.position.z += currentSpeed * delta;
+                if (gridHelper.position.z > 10) gridHelper.position.z = 0;
+
+                for (let i = projectiles.length - 1; i >= 0; i--) {
+                    projectiles[i].position.z -= (currentSpeed * 2.5) * delta; 
+                    if (projectiles[i].position.z < -200) {
+                        scene.remove(projectiles[i]);
+                        projectiles.splice(i, 1);
+                    }
+                }
+
+                for (let i = enemies.length - 1; i >= 0; i--) {
+                    enemies[i].position.z += currentSpeed * delta;
+                    enemies[i].rotation.x += 2 * delta;
+                    enemies[i].rotation.y += 3 * delta;
+                    if (enemies[i].position.z > 10) {
+                        scene.remove(enemies[i]);
+                        enemies.splice(i, 1);
+                        score += 10; 
+                        document.getElementById('scoreValue').innerText = score;
+                    }
+                }
+
+                for (let i = collectibles.length - 1; i >= 0; i--) {
+                    collectibles[i].position.z += currentSpeed * delta;
+                    collectibles[i].rotation.y += 3 * delta;
+                    if (collectibles[i].position.z > 10) {
+                        scene.remove(collectibles[i]);
+                        collectibles.splice(i, 1);
+                    }
+                }
+
+                if (Math.random() < 0.03 + (speedMultiplier * 0.005)) spawnObject('ENEMY');
+                if (Math.random() < 0.02) spawnObject('COLLECTIBLE');
+
+                checkCollisions();
+                speedMultiplier += 0.01 * delta;
+            }
+
+            renderer.render(scene, camera);
+        }
+
+        animate();
+    </script>
+</body>
+</html>
