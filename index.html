@@ -186,7 +186,6 @@
         let playerVelY = 0;
         let playerVelX = 0;
         let isJumping = false;
-        let jumpStartY = GROUND_Y; // Tracks exactly where the player jumped from
 
         const PATH = 'SpaceShip%20Images/'; 
         const keys = { right: false, left: false, up: false };
@@ -243,18 +242,25 @@
         let backgroundProps = [];
 
         const manager = new THREE.LoadingManager();
-        manager.onLoad = function () {
+        let hasInitialized = false;
+
+        function initGame() {
+            if (hasInitialized) return;
+            hasInitialized = true;
             document.getElementById('loadingText').style.display = 'none';
             document.getElementById('startBtn').style.display = 'inline-block';
             gameState = 'MENU';
             buildLevel(); 
+        }
+
+        manager.onLoad = function () {
+            initGame();
         };
+
         manager.onError = function (url) {
             console.error('Error loading:', url);
             document.getElementById('loadingText').innerText = "Asset Error. Using Fallbacks.";
-            document.getElementById('startBtn').style.display = 'inline-block';
-            gameState = 'MENU';
-            buildLevel(); 
+            initGame();
         };
 
         gltfLoader.manager = manager;
@@ -480,7 +486,6 @@
                 if (!isJumping && gameState === 'PLAYING') {
                     playerVelY = JUMP_FORCE;
                     isJumping = true;
-                    jumpStartY = playerGroup.position.y; // Record the starting jump height
                     createDustPoof(playerGroup.position.x, playerGroup.position.y, playerGroup.position.z);
                 }
             }
@@ -504,7 +509,6 @@
                     if (isJumpKey && !isJumping && gameState === 'PLAYING') {
                         playerVelY = JUMP_FORCE;
                         isJumping = true;
-                        jumpStartY = playerGroup.position.y; // Record the starting jump height
                         createDustPoof(playerGroup.position.x, playerGroup.position.y, playerGroup.position.z);
                     }
                 }, { passive: false });
@@ -557,7 +561,6 @@
             playerGroup.position.set(0, GROUND_Y, 0);
             playerVelY = 0;
             isJumping = false;
-            jumpStartY = GROUND_Y;
             keys.right = false;
             keys.left = false;
             
@@ -598,22 +601,20 @@
                 const eX = enemies[i].mesh.position.x;
                 const eY = enemies[i].mesh.position.y;
                 
-                // --- THE FIX ---
-                // If the player is jumping up, and the enemy is on a platform above where they started, ignore it!
-                if (playerVelY > 0 && eY > jumpStartY + 1.0) continue;
-
                 const distX = Math.abs(pX - eX);
                 const distY = pY - eY; 
 
-                if (distX < 1.2 && Math.abs(distY) < 2.5) { 
-                    if (playerVelY < 0 && distY > 0.5) { // Stomp condition
+                if (distX < 1.2) { 
+                    // Stomp condition: Player falling and above enemy
+                    if (playerVelY < 0 && distY > 0.5 && distY < 2.5) { 
                         enemies[i].active = false;
                         scene.remove(enemies[i].mesh);
                         createLootExplosion(eX, eY + 1, 0);
                         playerVelY = JUMP_FORCE * 0.7; 
                         isJumping = true;
-                        jumpStartY = playerGroup.position.y; // Record new jump start from the stomp
-                    } else if (distX < 0.8 && distY < 1.0 && distY > -1.5) { 
+                    } 
+                    // Side collision: Player's feet must be vertically aligned with enemy
+                    else if (distX < 0.8 && distY > -0.5 && distY < 1.0) { 
                         triggerGameOver();
                         return;
                     }
@@ -625,12 +626,10 @@
                 if (!obstacles[i].active) continue;
                 const oX = obstacles[i].mesh.position.x;
                 const oY = obstacles[i].mesh.position.y;
-                
-                // --- THE FIX ---
-                if (playerVelY > 0 && oY > jumpStartY + 1.0) continue;
-
                 const distY = pY - oY;
-                if (Math.abs(pX - oX) < 0.8 && Math.abs(distY) < 1.0) {
+                
+                // Player's feet must be vertically aligned with obstacle
+                if (Math.abs(pX - oX) < 0.8 && distY > -0.5 && distY < 1.0) {
                     triggerGameOver();
                     return;
                 }
